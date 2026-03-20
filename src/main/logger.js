@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const RETENTION_DAYS = 7;
+const RETENTION_DAYS = 30;
 
 let logsDir = null;
 

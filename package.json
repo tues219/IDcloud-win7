@@ -13,20 +13,20 @@
     "rebuild": "electron-rebuild"
   },
   "dependencies": {
-    "smartcard": "^3.7.0",
-    "serialport": "^12.0.0",
-    "ws": "^8.18.0",
+    "@fortawesome/fontawesome-free": "^7.2.0",
     "chokidar": "^3.6.0",
     "dicom-parser": "^1.8.21",
-    "sharp": "^0.33.5",
-    "legacy-encoding": "^3.0.0",
-    "hex2imagebase64": "^1.0.0",
     "electron-store": "^8.2.0",
     "electron-updater": "^6.3.9",
-    "node-fetch": "^2.7.0"
+    "legacy-encoding": "^3.0.0",
+    "node-fetch": "^2.7.0",
+    "serialport": "^12.0.0",
+    "sharp": "^0.33.5",
+    "smartcard": "^3.7.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
-    "electron": "^34.0.0",
+    "electron": "^41.0.3",
     "electron-builder": "^25.1.8",
     "electron-rebuild": "^3.2.9",
     "vitest": "^3.0.0"
@@ -45,7 +45,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.ico"
@@ -54,7 +56,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["arm64", "x64"]
+          "arch": [
+            "arm64",
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.icns",
@@ -67,5 +72,6 @@
     "publish": {
       "provider": "github"
     }
-  }
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }

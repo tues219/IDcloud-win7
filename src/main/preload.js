@@ -26,9 +26,17 @@ contextBridge.exposeInMainWorld('bridge', {
   // Auth
   login: (credentials) => ipcRenderer.invoke('auth-login', credentials),
   logout: () => ipcRenderer.invoke('auth-logout'),
+  getAuthStatus: () => ipcRenderer.invoke('auth-status'),
+  getClinicList: () => ipcRenderer.invoke('get-clinic-list'),
+  selectBranch: (clinicBranchURL) => ipcRenderer.invoke('select-branch', clinicBranchURL),
+
+  // Logs
+  getLogs: () => ipcRenderer.invoke('get-logs'),
 
   // App
   getVersion: () => ipcRenderer.invoke('app-version'),
+  getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
+  setAutoStart: (enabled) => ipcRenderer.invoke('set-auto-start', enabled),
 
   // Events
   onStatusUpdate: (cb) => ipcRenderer.on('status-update', (_, data) => cb(data)),

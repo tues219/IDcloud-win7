@@ -1,5 +1,7 @@
 const fetch = require('node-fetch');
 
+const DEFAULT_API_BASE = 'https://api.dentcloud.app';
+
 class AuthManager {
   constructor(logger, configStore) {
     this.logger = logger;
@@ -11,10 +13,14 @@ class AuthManager {
     this.branchInfo = null;
   }
 
+  _getApiBase() {
+    const config = this.configStore.getConfig('xray');
+    return config.apiBaseUrl || DEFAULT_API_BASE;
+  }
+
   async login(credentials) {
     try {
-      const config = this.configStore.getConfig('xray');
-      const url = `${config.apiBaseUrl}/api/login`;
+      const url = `${this._getApiBase()}/api/login`;
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -48,14 +54,55 @@ class AuthManager {
     }
   }
 
-  async validateConfiguration(clinicBranchURL) {
+  async getClinicList(retry = true) {
+    if (!this.accessToken) return { success: false, error: 'Not authenticated' };
+    try {
+      const url = `${this._getApiBase()}/api/user/clinic`;
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${this.accessToken}` },
+      });
+      if (response.status === 401 && retry && this.refreshTokenCookie) {
+        if (await this._refreshToken()) return this.getClinicList(false);
+      }
+      if (!response.ok) throw new Error(`Failed to fetch clinics: ${response.status}`);
+      const result = await response.json();
+      return { success: true, clinics: result.data || result };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async validateConfiguration(clinicBranchURL, retry = true) {
     if (!this.accessToken) throw new Error('Not authenticated');
     const parts = clinicBranchURL.split('/');
     if (parts.length !== 2) throw new Error('Invalid format. Expected: clinicName/branchName');
-    this.clinicInfo = { url: parts[0].trim() };
-    this.branchInfo = { url: parts[1].trim() };
-    this.logger.info('Configuration validated', { clinic: this.clinicInfo.url, branch: this.branchInfo.url });
-    return { success: true, clinic: this.clinicInfo, branch: this.branchInfo };
+    const clinicCode = parts[0].trim();
+    const branchCode = parts[1].trim();
+
+    try {
+      const url = `${this._getApiBase()}/api/branch/${clinicCode}/${branchCode}`;
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${this.accessToken}` },
+      });
+      if (response.status === 401 && retry && this.refreshTokenCookie) {
+        if (await this._refreshToken()) return this.validateConfiguration(clinicBranchURL, false);
+      }
+      if (!response.ok) throw new Error(`Branch validation failed: ${response.status}`);
+      const result = await response.json();
+      const branchData = result.data || result;
+
+      this.clinicInfo = { url: clinicCode, name: branchData.clinic?.name || clinicCode };
+      this.branchInfo = { url: branchCode, name: branchData.name || branchCode, id: branchData.id };
+
+      this.logger.info('Branch selected', { clinic: clinicCode, branch: branchCode });
+      return { success: true, clinic: this.clinicInfo, branch: this.branchInfo };
+    } catch (error) {
+      // Fallback: still store the codes so basic functionality works
+      this.clinicInfo = { url: clinicCode };
+      this.branchInfo = { url: branchCode };
+      this.logger.warn('Branch API call failed, using config values', { error: error.message });
+      return { success: true, clinic: this.clinicInfo, branch: this.branchInfo, warning: error.message };
+    }
   }
 
   async searchPatientByDN(patientDN, retry = true) {
@@ -63,8 +110,7 @@ class AuthManager {
       return { success: false, error: 'Not configured' };
     }
     try {
-      const config = this.configStore.getConfig('xray');
-      const url = `${config.apiBaseUrl}/api/patient/${this.clinicInfo.url}/${this.branchInfo.url}?dn=${encodeURIComponent(patientDN)}`;
+      const url = `${this._getApiBase()}/api/patient/${this.clinicInfo.url}/${this.branchInfo.url}?dn=${encodeURIComponent(patientDN)}`;
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${this.accessToken}` },
       });
@@ -96,8 +142,7 @@ class AuthManager {
 
   async getPresignedUploadURL(patientId, fileMetadata, dicomMetadata, retry = true) {
     try {
-      const config = this.configStore.getConfig('xray');
-      const url = `${config.apiBaseUrl}/api/mediaFile/getPresigned/${this.clinicInfo.url}/${this.branchInfo.url}`;
+      const url = `${this._getApiBase()}/api/mediaFile/getPresigned/${this.clinicInfo.url}/${this.branchInfo.url}`;
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -129,8 +174,7 @@ class AuthManager {
 
   async _refreshToken() {
     try {
-      const config = this.configStore.getConfig('xray');
-      const response = await fetch(`${config.apiBaseUrl}/api/token`, {
+      const response = await fetch(`${this._getApiBase()}/api/token`, {
         method: 'POST',
         headers: { 'Cookie': this.refreshTokenCookie, 'Content-Type': 'application/json' },
       });

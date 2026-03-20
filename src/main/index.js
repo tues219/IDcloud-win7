@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, powerMonitor, Menu } = require('electron');
 const path = require('path');
 const net = require('net');
 const { createLogger } = require('./logger');
@@ -94,6 +94,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 900,
     height: 650,
+    icon: path.join(__dirname, '../../assets/icon.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -102,6 +103,7 @@ function createWindow() {
     show: false,
   });
 
+  Menu.setApplicationMenu(null);
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
 
@@ -176,9 +178,68 @@ ipcMain.handle('drop-files', async (_, filePaths) => {
 ipcMain.handle('lookup-patient', (_, dn) => authManager.searchPatientByDN(dn));
 ipcMain.handle('assign-patient', (_, queueItemId, patientInfo) => uploadQueue.assignPatientDN(queueItemId, patientInfo));
 
-ipcMain.handle('auth-login', (_, creds) => authManager.login(creds));
+ipcMain.handle('auth-login', async (_, creds) => {
+  const result = await authManager.login(creds);
+  if (result.success) {
+    const clinics = await authManager.getClinicList();
+    result.clinics = clinics.clinics || [];
+  }
+  return result;
+});
 ipcMain.handle('auth-logout', () => { authManager.logout(); return { success: true }; });
+ipcMain.handle('auth-status', () => ({
+  authenticated: authManager.isAuthenticated(),
+  user: authManager.userInfo,
+  hasBranch: !!(authManager.clinicInfo && authManager.branchInfo),
+}));
+ipcMain.handle('get-clinic-list', () => authManager.getClinicList());
+ipcMain.handle('select-branch', async (_, clinicBranchURL) => {
+  const result = await authManager.validateConfiguration(clinicBranchURL);
+  if (result.success) {
+    const xrayConfig = getConfig('xray');
+    setConfig('xray', { ...xrayConfig, clinicBranchURL });
+  }
+  return result;
+});
+ipcMain.handle('get-logs', async () => {
+  const fs = require('fs');
+  const logsDir = path.join(app.getPath('userData'), 'logs');
+  try {
+    if (!fs.existsSync(logsDir)) return [];
+    const files = fs.readdirSync(logsDir)
+      .filter(f => f.endsWith('.log') && !f.includes('edc-transactions'))
+      .sort()
+      .reverse()
+      .slice(0, 7); // read last 7 days of log files
+    const entries = [];
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(logsDir, file), 'utf8');
+      for (const line of content.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          entries.push(JSON.parse(line));
+        } catch { /* skip malformed lines */ }
+      }
+    }
+    // Sort newest first, cap at 200
+    entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    return entries.slice(0, 200);
+  } catch (err) {
+    logger.error('Failed to read logs', { error: err.message });
+    return [];
+  }
+});
 ipcMain.handle('app-version', () => app.getVersion());
+
+ipcMain.handle('get-auto-start', () => {
+  return app.getLoginItemSettings().openAtLogin;
+});
+
+ipcMain.handle('set-auto-start', (_, enabled) => {
+  app.setLoginItemSettings({ openAtLogin: enabled });
+  setConfig('app', { ...getConfig('app'), autoStart: enabled });
+  return { success: true };
+});
 
 // App lifecycle
 async function initModules() {
@@ -203,8 +264,24 @@ async function initModules() {
     logger.error(`Port ${wsPort} is in use`);
   }
 
-  // Auto-start watching if configured
+  // Auto-login if saved credentials exist
   const xrayConfig = getConfig('xray');
+  if (xrayConfig.email) {
+    try {
+      const password = loadCredential('xray-password');
+      if (password) {
+        await authManager.login({ email: xrayConfig.email, password });
+        if (xrayConfig.clinicBranchURL) {
+          await authManager.validateConfiguration(xrayConfig.clinicBranchURL);
+        }
+        logger.info('Auto-login successful', { email: xrayConfig.email });
+      }
+    } catch (err) {
+      logger.error('Auto-login failed (non-fatal)', { error: err.message });
+    }
+  }
+
+  // Auto-start watching if configured
   if (xrayConfig.watchFolder) {
     try {
       await fileWatcher.startWatching(xrayConfig.watchFolder);
@@ -217,6 +294,11 @@ async function initModules() {
 app.whenReady().then(async () => {
   createWindow();
   createTray(mainWindow, logger);
+
+  // Apply auto-start setting
+  const appConfig = getConfig('app');
+  app.setLoginItemSettings({ openAtLogin: !!appConfig.autoStart });
+
   await initModules();
 
   // Lifecycle: suspend/resume

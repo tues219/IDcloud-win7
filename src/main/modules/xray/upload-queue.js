@@ -50,6 +50,9 @@ class UploadQueue extends EventEmitter {
 
   async _processItem(item) {
     try {
+      // Items awaiting assignment should not be processed — wait for user action
+      if (item.status === 'awaiting-assignment') return;
+
       item.status = 'processing';
       item.attempts++;
       this.emit('queue-updated', this.getQueueStatus());
@@ -66,7 +69,17 @@ class UploadQueue extends EventEmitter {
       // Upload decision
       item.progress = 20;
       const decision = this.authManager.shouldUpload(item.metadata, searchResults);
-      if (!decision.upload) throw new Error(decision.reason || 'Upload not approved');
+      if (!decision.upload) {
+        item.status = 'awaiting-assignment';
+        item.matchInfo = {
+          reason: decision.reason,
+          dicomPatientId: item.metadata.patientId,
+          dicomPatientName: item.metadata.patientNameFormatted,
+          searchResults: searchResults.patients || [],
+        };
+        this.emit('queue-updated', this.getQueueStatus());
+        return;
+      }
 
       // Get presigned URL
       item.progress = 30;
@@ -79,9 +92,9 @@ class UploadQueue extends EventEmitter {
 
       // Upload
       item.progress = 50;
-      const fsSync = require('fs');
+      const fs = require('fs').promises;
       const fetch = require('node-fetch');
-      const fileBuffer = fsSync.readFileSync(item.fileInfo.path);
+      const fileBuffer = await fs.readFile(item.fileInfo.path);
       const response = await fetch(presigned.uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/dicom' },
@@ -101,7 +114,8 @@ class UploadQueue extends EventEmitter {
         setTimeout(() => {
           item.status = 'pending';
           item.error = null;
-          this.processQueue();
+          this.emit('queue-updated', this.getQueueStatus());
+          if (!this.processing) this.processQueue();
         }, 5000);
       }
     }
