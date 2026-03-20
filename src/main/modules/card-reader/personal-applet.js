@@ -1,8 +1,6 @@
-const { CommandApdu } = require('smartcard');
 const legacy = require('legacy-encoding');
 const { getData, delay } = require('./reader');
 const apduPerson = require('./apdu-person');
-const hex2imagebase64 = require('hex2imagebase64');
 
 class PersonalApplet {
   constructor(card, req = [0x00, 0xc0, 0x00, 0x00], options = {}) {
@@ -189,7 +187,7 @@ class PersonalApplet {
           }
         }
       }
-      info.photo = photo.length > 0 ? hex2imagebase64(photo) : null;
+      info.photo = photo.length > 0 ? Buffer.from(photo, 'hex').toString('base64') : null;
       if (failedChunks > 0) {
         logger.warn(`Photo read completed with ${failedChunks} failed chunks`);
       }

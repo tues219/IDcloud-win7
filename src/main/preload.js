@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('bridge', {
   getClinicList: () => ipcRenderer.invoke('get-clinic-list'),
   selectBranch: (clinicBranchURL) => ipcRenderer.invoke('select-branch', clinicBranchURL),
 
+  // Logs
+  getLogs: () => ipcRenderer.invoke('get-logs'),
+
   // App
   getVersion: () => ipcRenderer.invoke('app-version'),
 

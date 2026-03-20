@@ -21,128 +21,216 @@
     </header>
 
     <nav>
-      <button class="tab active" data-tab="status">Status</button>
-      <button class="tab" data-tab="settings">Settings</button>
-      <button class="tab" data-tab="xray">Xray</button>
+      <button class="tab active" data-tab="status">Dashboard</button>
+      <button class="tab" data-tab="xray">X-ray</button>
       <button class="tab" data-tab="log">Event Log</button>
     </nav>
 
-    <!-- Status Panel -->
+    <!-- Dashboard Panel -->
     <section id="status" class="panel active">
-      <div class="panel-header">
-        <h2>Device Status</h2>
-        <span class="panel-hint">Auto-refreshes every 10s</span>
-      </div>
       <div class="status-grid">
-        <div class="status-card">
-          <h3>Card Reader</h3>
-          <div id="card-reader-status" class="status-badge disconnected">Disconnected</div>
-          <div id="card-reader-detail" class="status-detail"></div>
-        </div>
-        <div class="status-card">
-          <h3>EDC Terminal</h3>
-          <div id="edc-status" class="status-badge disconnected">Disconnected</div>
-          <div id="edc-detail" class="status-detail"></div>
-        </div>
-        <div class="status-card">
-          <h3>Xray Watcher</h3>
-          <div id="xray-status" class="status-badge disconnected">Stopped</div>
-          <div id="xray-detail" class="status-detail"></div>
-        </div>
-        <div class="status-card">
-          <h3>WebSocket Server</h3>
-          <div id="ws-status" class="status-badge connected">Running</div>
-          <div id="ws-detail" class="status-detail"></div>
-        </div>
-      </div>
-    </section>
 
-    <!-- Settings Panel -->
-    <section id="settings" class="panel">
-      <div class="panel-header">
-        <h2>Settings</h2>
-      </div>
-      <div class="settings-form">
-        <fieldset>
-          <legend>EDC Terminal</legend>
-          <label>COM Port <input type="text" id="edc-com" placeholder="COM1"></label>
-          <label>Baud Rate <select id="edc-baud">
-            <option value="9600" selected>9600</option>
-            <option value="19200">19200</option>
-            <option value="38400">38400</option>
-          </select></label>
-        </fieldset>
-        <fieldset>
-          <legend>Xray Upload</legend>
-          <label>Watch Folder
-            <div class="input-group">
-              <input type="text" id="xray-folder" placeholder="Select folder..." readonly>
-              <button id="btn-select-folder" class="btn-secondary">Browse</button>
+        <!-- DentCloud Connection -->
+        <div class="status-card card-connection">
+          <div class="card-main">
+            <div class="card-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+              </svg>
             </div>
-          </label>
-          <label>API Base URL <input type="text" id="xray-api" placeholder="https://api.example.com"></label>
-          <label>Clinic / Branch <input type="text" id="xray-clinic" placeholder="clinicName/branchName"></label>
-        </fieldset>
-        <fieldset>
-          <legend>WebSocket</legend>
-          <label>Port <input type="number" id="ws-port" value="9900"></label>
-        </fieldset>
-        <button id="btn-save-settings" class="btn-primary">Save Settings</button>
+            <div class="card-body">
+              <h3>DentCloud Connection</h3>
+              <p class="card-desc">Ready for DentCloud webapp to connect</p>
+              <div id="ws-status" class="status-indicator connected">
+                <span class="pulse"></span>
+                <span class="status-text">Running</span>
+              </div>
+              <div id="ws-detail" class="status-detail"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card Reader -->
+        <div class="status-card card-cardreader">
+          <div class="card-main">
+            <div class="card-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
+              </svg>
+            </div>
+            <div class="card-body">
+              <h3>Card Reader</h3>
+              <p class="card-desc">Smart card authentication</p>
+              <div id="card-reader-status" class="status-indicator disconnected">
+                <span class="pulse"></span>
+                <span class="status-text">Disconnected</span>
+              </div>
+              <div id="card-reader-detail" class="status-detail"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- EDC Terminal -->
+        <div class="status-card card-edc">
+          <div class="card-main">
+            <div class="card-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 21V7"/><path d="M16 21V7"/><path d="M6 11h4"/><path d="M14 11h4"/>
+              </svg>
+            </div>
+            <div class="card-body">
+              <h3>EDC Terminal</h3>
+              <p class="card-desc">Payment device</p>
+              <div id="edc-status" class="status-indicator disconnected">
+                <span class="pulse"></span>
+                <span class="status-text">Disconnected</span>
+              </div>
+              <div id="edc-detail" class="status-detail"></div>
+            </div>
+          </div>
+          <button class="gear-toggle" id="btn-edc-gear" title="Configure EDC">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+          <div class="card-settings" id="edc-settings">
+            <div class="card-settings-inner">
+              <div class="inline-fields">
+                <div class="field">
+                  <label>COM Port</label>
+                  <input type="text" id="edc-com" placeholder="COM1">
+                </div>
+                <div class="field">
+                  <label>Baud Rate</label>
+                  <select id="edc-baud">
+                    <option value="9600" selected>9600</option>
+                    <option value="19200">19200</option>
+                    <option value="38400">38400</option>
+                  </select>
+                </div>
+                <button class="btn-save-inline" id="btn-save-edc">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- X-ray Watcher -->
+        <div class="status-card card-xray">
+          <div class="card-main">
+            <div class="card-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>
+              </svg>
+            </div>
+            <div class="card-body">
+              <h3>X-ray Watcher</h3>
+              <p class="card-desc">File monitoring service</p>
+              <div id="xray-status" class="status-indicator disconnected">
+                <span class="pulse"></span>
+                <span class="status-text">Stopped</span>
+              </div>
+              <div id="xray-detail" class="status-detail"></div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </section>
 
-    <!-- Xray Panel -->
+    <!-- X-ray Panel -->
     <section id="xray" class="panel">
-      <div class="panel-header">
-        <h2>Xray Upload</h2>
+
+      <!-- Collapsible X-ray Configuration -->
+      <div class="xray-config-bar">
+        <div class="config-bar-header" id="xray-config-toggle">
+          <h3>X-ray Configuration</h3>
+          <svg class="config-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+        <div class="config-bar-body" id="xray-config-body">
+          <div class="config-bar-inner">
+            <div class="config-fields">
+              <div class="field config-field-full">
+                <label>Watch Folder</label>
+                <div class="input-with-btn">
+                  <input type="text" id="xray-folder" placeholder="Select folder to watch..." readonly>
+                  <button class="btn-browse" id="btn-select-folder">Browse</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>API Base URL</label>
+                <input type="text" id="xray-api" placeholder="https://api.example.com">
+              </div>
+            </div>
+            <div class="config-save-row">
+              <button class="btn-save-inline" id="btn-save-xray">Save Settings</button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div id="xray-login" class="xray-login">
-        <h3>Sign In to DentCloud</h3>
+      <!-- Login -->
+      <div id="xray-login" class="xray-auth-card">
+        <div class="auth-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
+        <h3>Sign in to DentCloud</h3>
+        <p class="auth-hint">Required to upload x-ray images</p>
         <div class="form-group">
-          <label>Email: <input type="email" id="xray-email"></label>
+          <label>Email</label>
+          <input type="email" id="xray-email" placeholder="you@clinic.com">
         </div>
         <div class="form-group">
-          <label>Password: <input type="password" id="xray-password"></label>
+          <label>Password</label>
+          <input type="password" id="xray-password" placeholder="Enter password">
         </div>
         <button id="btn-xray-login" class="btn-primary">Sign In</button>
         <div id="xray-login-error" class="login-error"></div>
       </div>
 
+      <!-- Branch Select -->
       <div id="xray-branch-select" style="display:none">
-        <div id="xray-user-info-branch">
-          Signed in as: <span id="xray-branch-user-email"></span>
-          <button id="btn-branch-logout">Sign Out</button>
+        <div class="auth-bar">
+          <span>Signed in as <strong id="xray-branch-user-email"></strong></span>
+          <button id="btn-branch-logout" class="btn-ghost">Sign Out</button>
         </div>
-        <h3>Select Branch</h3>
+        <h3 class="section-title">Select Your Branch</h3>
         <div id="clinic-list"></div>
       </div>
 
+      <!-- Authenticated -->
       <div id="xray-authenticated" style="display:none">
-        <div id="xray-user-info">
-          Signed in as: <span id="xray-user-email"></span>
-          <button id="btn-xray-logout">Sign Out</button>
+        <div class="auth-bar">
+          <span>Signed in as <strong id="xray-user-email"></strong></span>
+          <button id="btn-xray-logout" class="btn-ghost">Sign Out</button>
         </div>
         <div id="drop-zone" class="drop-zone">
           <div class="drop-zone-inner">
-            <div class="drop-icon">&#8682;</div>
-            <p class="drop-title">Drop files here</p>
+            <div class="drop-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+            </div>
+            <p class="drop-title">Drop x-ray files here</p>
             <p class="drop-hint">DICOM, JPG, or PNG</p>
           </div>
         </div>
-        <div id="queue-stats"></div>
-        <div id="file-list"></div>
+        <div id="queue-stats" class="queue-stats"></div>
+        <div id="file-list" class="file-list"></div>
         <div id="assign-panel" style="display:none">
           <h3>Assign Patient</h3>
           <div id="assign-file-info"></div>
           <div class="assign-row">
             <input type="text" id="assign-dn" placeholder="Patient DN">
-            <button id="btn-lookup" class="btn-primary">Lookup</button>
+            <button id="btn-lookup" class="btn-primary btn-sm">Lookup</button>
           </div>
           <div id="assign-result"></div>
           <div id="assign-actions" style="display:none">
-            <button id="btn-assign-confirm" class="btn-primary">Confirm Assignment</button>
-            <button id="btn-assign-cancel">Cancel</button>
+            <button id="btn-assign-confirm" class="btn-primary btn-sm">Confirm Assignment</button>
+            <button id="btn-assign-cancel" class="btn-ghost">Cancel</button>
           </div>
         </div>
       </div>
@@ -152,7 +240,15 @@
     <section id="log" class="panel">
       <div class="panel-header">
         <h2>Event Log</h2>
-        <span class="panel-hint">Latest 50 entries</span>
+        <span class="panel-hint">Up to 200 entries</span>
+      </div>
+      <div class="log-filter-bar">
+        <button class="filter-chip active" data-filter="all">All</button>
+        <button class="filter-chip" data-filter="cardReader">Card Reader</button>
+        <button class="filter-chip" data-filter="edc">EDC</button>
+        <button class="filter-chip" data-filter="xray">X-ray</button>
+        <button class="filter-chip" data-filter="ws">Connection</button>
+        <button class="filter-chip" data-filter="error">Error</button>
       </div>
       <div id="event-log" class="log-container"></div>
     </section>

@@ -2,6 +2,8 @@
 ;(function() {
 const bridge = window.bridge;
 const eventLog = [];
+let activeFilter = 'all';
+let persistedLogsLoaded = false;
 
 // Tab switching
 document.querySelectorAll('.tab').forEach(tab => {
@@ -10,6 +12,11 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById(tab.dataset.tab).classList.add('active');
+
+    // Load persisted logs when Event Log tab is first shown
+    if (tab.dataset.tab === 'log' && !persistedLogsLoaded) {
+      loadPersistedLogs();
+    }
   });
 });
 
@@ -27,8 +34,6 @@ bridge.onStatusUpdate((data) => {
 bridge.onEvent((data) => {
   if (data.type === 'file-detected') {
     addLog('info', 'xray', `File detected: ${data.fileInfo.name}`);
-  } else if (data.type === 'show-settings') {
-    document.querySelector('.tab[data-tab="settings"]').click();
   }
 });
 
@@ -37,11 +42,20 @@ bridge.onQueueUpdate((status) => {
 });
 
 function updateStatus(module, status, error) {
-  const el = document.getElementById(`${module === 'cardReader' ? 'card-reader' : module}-status`);
+  const elId = module === 'cardReader' ? 'card-reader' : module;
+  const el = document.getElementById(`${elId}-status`);
   if (!el) return;
-  el.textContent = status;
-  el.className = 'status-badge ' + status;
-  const detail = document.getElementById(`${module === 'cardReader' ? 'card-reader' : module}-detail`);
+
+  // Update the status indicator class
+  el.className = 'status-indicator ' + status;
+
+  // Update the status text inside the indicator
+  const textEl = el.querySelector('.status-text');
+  if (textEl) {
+    textEl.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+  }
+
+  const detail = document.getElementById(`${elId}-detail`);
   if (detail && error) detail.textContent = error;
 }
 
@@ -52,7 +66,8 @@ async function refreshStatus() {
     updateStatus('cardReader', status.cardReader.status);
     updateStatus('edc', status.edc.status);
     updateStatus('xray', status.xray.fileWatcher.isWatching ? 'connected' : 'disconnected');
-    // port info hidden from dashboard
+    // ws status — always running if we got here
+    updateStatus('ws', 'connected');
     if (status.xray.queue) renderQueue(status.xray.queue);
   } catch (err) {
     addLog('error', 'dashboard', err.message);
@@ -61,7 +76,23 @@ async function refreshStatus() {
 refreshStatus();
 setInterval(refreshStatus, 10000);
 
-// Settings
+// ── EDC Gear Toggle ──
+document.getElementById('btn-edc-gear').addEventListener('click', () => {
+  const settings = document.getElementById('edc-settings');
+  const gear = document.getElementById('btn-edc-gear');
+  settings.classList.toggle('open');
+  gear.classList.toggle('open');
+});
+
+// ── X-ray Config Toggle ──
+document.getElementById('xray-config-toggle').addEventListener('click', () => {
+  const body = document.getElementById('xray-config-body');
+  const header = document.getElementById('xray-config-toggle');
+  body.classList.toggle('open');
+  header.classList.toggle('open');
+});
+
+// ── Load Settings ──
 async function loadSettings() {
   const config = await bridge.getConfig();
   if (config.edc) {
@@ -71,14 +102,35 @@ async function loadSettings() {
   if (config.xray) {
     document.getElementById('xray-folder').value = config.xray.watchFolder || '';
     document.getElementById('xray-api').value = config.xray.apiBaseUrl || '';
-    document.getElementById('xray-clinic').value = config.xray.clinicBranchURL || '';
-  }
-  if (config.ws) {
-    document.getElementById('ws-port').value = config.ws.port || 9900;
   }
 }
 loadSettings();
 
+// ── EDC Save (inline in dashboard card) ──
+document.getElementById('btn-save-edc').addEventListener('click', async () => {
+  const config = await bridge.getConfig();
+  const edcConfig = config.edc || {};
+  await bridge.saveConfig('edc', {
+    ...edcConfig,
+    comPort: document.getElementById('edc-com').value,
+    baudRate: parseInt(document.getElementById('edc-baud').value),
+  });
+  addLog('info', 'settings', 'EDC settings saved');
+});
+
+// ── X-ray Save (inline in X-ray tab) ──
+document.getElementById('btn-save-xray').addEventListener('click', async () => {
+  const config = await bridge.getConfig();
+  const xrayConfig = config.xray || {};
+  await bridge.saveConfig('xray', {
+    ...xrayConfig,
+    watchFolder: document.getElementById('xray-folder').value,
+    apiBaseUrl: document.getElementById('xray-api').value,
+  });
+  addLog('info', 'settings', 'X-ray settings saved');
+});
+
+// ── Folder Browse ──
 document.getElementById('btn-select-folder').addEventListener('click', async () => {
   const result = await bridge.selectFolder();
   if (result.success) {
@@ -86,24 +138,7 @@ document.getElementById('btn-select-folder').addEventListener('click', async () 
   }
 });
 
-document.getElementById('btn-save-settings').addEventListener('click', async () => {
-  await bridge.saveConfig('edc', {
-    comPort: document.getElementById('edc-com').value,
-    baudRate: parseInt(document.getElementById('edc-baud').value),
-  });
-  await bridge.saveConfig('xray', {
-    watchFolder: document.getElementById('xray-folder').value,
-    apiBaseUrl: document.getElementById('xray-api').value,
-    clinicBranchURL: document.getElementById('xray-clinic').value,
-  });
-  await bridge.saveConfig('ws', {
-    port: parseInt(document.getElementById('ws-port').value),
-  });
-  addLog('info', 'settings', 'Settings saved');
-  alert('Settings saved');
-});
-
-// Xray auth
+// ── Xray Auth ──
 let currentUser = null;
 
 function showLoginView() {
@@ -197,7 +232,6 @@ bridge.getAuthStatus().then(async (status) => {
     if (status.hasBranch) {
       showAuthenticatedView(status.user);
     } else {
-      // Authenticated but no branch selected — fetch clinic list
       const clinicResult = await bridge.getClinicList();
       if (clinicResult.success && clinicResult.clinics && clinicResult.clinics.length > 0) {
         showBranchSelectView(status.user, clinicResult.clinics);
@@ -235,14 +269,12 @@ document.getElementById('btn-xray-login').addEventListener('click', async () => 
   try {
     const result = await bridge.login({ email, password });
     if (result.success) {
-      // Save email to xray config
       const config = await bridge.getConfig();
       const xrayConfig = config.xray || {};
       xrayConfig.email = email;
       await bridge.saveConfig('xray', xrayConfig);
       addLog('info', 'xray', 'Signed in successfully');
 
-      // Show branch selection if clinics are returned
       if (result.clinics && result.clinics.length > 0) {
         showBranchSelectView(result.user, result.clinics);
       } else {
@@ -273,7 +305,7 @@ document.getElementById('btn-branch-logout').addEventListener('click', async () 
   addLog('info', 'xray', 'Signed out');
 });
 
-// Xray drop zone
+// ── Drop Zone ──
 const dropZone = document.getElementById('drop-zone');
 dropZone.addEventListener('dragover', (e) => {
   e.preventDefault();
@@ -296,12 +328,21 @@ let currentQueueItems = [];
 
 function renderQueue(status) {
   const statsEl = document.getElementById('queue-stats');
-  statsEl.innerHTML = `Pending: ${status.pending} | Processing: ${status.processing} | Completed: ${status.completed} | Failed: ${status.failed} | Awaiting: ${status.awaitingAssignment || 0}`;
+  const chips = [
+    { label: 'Pending', value: status.pending },
+    { label: 'Processing', value: status.processing },
+    { label: 'Completed', value: status.completed },
+    { label: 'Failed', value: status.failed },
+    { label: 'Awaiting', value: status.awaitingAssignment || 0 },
+  ];
+  statsEl.innerHTML = chips.map(c =>
+    `<span class="stat-chip${c.value > 0 ? ' has-value' : ''}">${c.label}: ${c.value}</span>`
+  ).join('');
 
   currentQueueItems = status.items || [];
   const listEl = document.getElementById('file-list');
   if (currentQueueItems.length === 0) {
-    listEl.innerHTML = '<div class="file-item" style="color:#888">No files in queue</div>';
+    listEl.innerHTML = '<div class="file-item" style="color:var(--text-3)">No files in queue</div>';
     return;
   }
   listEl.innerHTML = currentQueueItems.map(item => {
@@ -318,7 +359,6 @@ function renderQueue(status) {
       </div>`;
   }).join('');
 
-  // Attach assign button handlers
   listEl.querySelectorAll('.btn-assign').forEach(btn => {
     btn.addEventListener('click', () => {
       const itemId = parseFloat(btn.dataset.id);
@@ -328,7 +368,7 @@ function renderQueue(status) {
   });
 }
 
-// Patient assignment
+// ── Patient Assignment ──
 let currentAssignItem = null;
 let selectedPatient = null;
 
@@ -341,7 +381,6 @@ function openAssignPanel(item) {
   const resultEl = document.getElementById('assign-result');
   const actionsEl = document.getElementById('assign-actions');
 
-  // Show file info
   let info = `<strong>File:</strong> ${item.fileInfo.name}`;
   if (item.metadata && item.metadata.patientNameFormatted) {
     info += `<br><strong>DICOM Patient:</strong> ${item.metadata.patientNameFormatted}`;
@@ -354,10 +393,8 @@ function openAssignPanel(item) {
   }
   fileInfo.innerHTML = info;
 
-  // Pre-fill DN from DICOM metadata
   dnInput.value = (item.matchInfo && item.matchInfo.dicomPatientId) || (item.metadata && item.metadata.patientId) || '';
 
-  // Show existing search results if available
   if (item.matchInfo && item.matchInfo.searchResults && item.matchInfo.searchResults.length > 0) {
     resultEl.innerHTML = renderPatientResults(item.matchInfo.searchResults);
     attachPatientCardHandlers(resultEl);
@@ -441,7 +478,7 @@ document.getElementById('btn-assign-cancel').addEventListener('click', () => {
   closeAssignPanel();
 });
 
-// Event log
+// ── Event Log ──
 function addLog(level, module, message) {
   const time = new Date().toLocaleTimeString();
   eventLog.unshift({ time, level, module, message });
@@ -449,9 +486,56 @@ function addLog(level, module, message) {
   renderLog();
 }
 
+// ── Persistent Log Loading ──
+async function loadPersistedLogs() {
+  try {
+    const logs = await bridge.getLogs();
+    if (logs && logs.length > 0) {
+      // Merge persisted logs (avoid duplicates by checking timestamp)
+      const existingTimes = new Set(eventLog.map(e => e.time));
+      for (const entry of logs) {
+        const time = new Date(entry.timestamp).toLocaleTimeString();
+        if (!existingTimes.has(time + entry.module + entry.message)) {
+          eventLog.push({
+            time,
+            level: entry.level || 'info',
+            module: entry.module || 'system',
+            message: entry.message || '',
+          });
+        }
+      }
+      // Sort newest first and cap
+      eventLog.sort((a, b) => 0); // keep insertion order (already newest-first from backend)
+      if (eventLog.length > 200) eventLog.length = 200;
+      renderLog();
+    }
+  } catch (err) {
+    console.error('Failed to load persisted logs:', err);
+  }
+  persistedLogsLoaded = true;
+}
+
+// ── Log Filtering ──
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    activeFilter = chip.dataset.filter;
+    renderLog();
+  });
+});
+
 function renderLog() {
   const el = document.getElementById('event-log');
-  el.innerHTML = eventLog.slice(0, 50).map(e =>
+  let filtered = eventLog;
+
+  if (activeFilter === 'error') {
+    filtered = eventLog.filter(e => e.level === 'error');
+  } else if (activeFilter !== 'all') {
+    filtered = eventLog.filter(e => e.module === activeFilter);
+  }
+
+  el.innerHTML = filtered.slice(0, 200).map(e =>
     `<div class="log-entry ${e.level}"><span class="time">${e.time}</span> <span class="module">[${e.module}]</span> ${e.message}</div>`
   ).join('');
 }

@@ -199,6 +199,34 @@ ipcMain.handle('select-branch', async (_, clinicBranchURL) => {
   }
   return result;
 });
+ipcMain.handle('get-logs', async () => {
+  const fs = require('fs');
+  const logsDir = path.join(app.getPath('userData'), 'logs');
+  try {
+    if (!fs.existsSync(logsDir)) return [];
+    const files = fs.readdirSync(logsDir)
+      .filter(f => f.endsWith('.log') && !f.includes('edc-transactions'))
+      .sort()
+      .reverse()
+      .slice(0, 7); // read last 7 days of log files
+    const entries = [];
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(logsDir, file), 'utf8');
+      for (const line of content.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          entries.push(JSON.parse(line));
+        } catch { /* skip malformed lines */ }
+      }
+    }
+    // Sort newest first, cap at 200
+    entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    return entries.slice(0, 200);
+  } catch (err) {
+    logger.error('Failed to read logs', { error: err.message });
+    return [];
+  }
+});
 ipcMain.handle('app-version', () => app.getVersion());
 
 // App lifecycle
