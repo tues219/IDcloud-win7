@@ -1,4 +1,5 @@
-(function() {
+// IIFE to avoid "already declared" errors on page reload
+;(function() {
 const bridge = window.bridge;
 const eventLog = [];
 
@@ -51,7 +52,7 @@ async function refreshStatus() {
     updateStatus('cardReader', status.cardReader.status);
     updateStatus('edc', status.edc.status);
     updateStatus('xray', status.xray.fileWatcher.isWatching ? 'connected' : 'disconnected');
-    document.getElementById('ws-detail').textContent = `Port ${status.ws.port}`;
+    // port info hidden from dashboard
     if (status.xray.queue) renderQueue(status.xray.queue);
   } catch (err) {
     addLog('error', 'dashboard', err.message);
@@ -454,4 +455,6 @@ function renderLog() {
     `<div class="log-entry ${e.level}"><span class="time">${e.time}</span> <span class="module">[${e.module}]</span> ${e.message}</div>`
   ).join('');
 }
+
+
 })();

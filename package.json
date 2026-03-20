@@ -13,20 +13,20 @@
     "rebuild": "electron-rebuild"
   },
   "dependencies": {
-    "smartcard": "^3.7.0",
-    "serialport": "^12.0.0",
-    "ws": "^8.18.0",
     "chokidar": "^3.6.0",
     "dicom-parser": "^1.8.21",
-    "sharp": "^0.33.5",
-    "legacy-encoding": "^3.0.0",
-    "hex2imagebase64": "^1.0.0",
     "electron-store": "^8.2.0",
     "electron-updater": "^6.3.9",
-    "node-fetch": "^2.7.0"
+    "hex2imagebase64": "^1.0.0",
+    "legacy-encoding": "^3.0.0",
+    "node-fetch": "^2.7.0",
+    "serialport": "^12.0.0",
+    "sharp": "^0.33.5",
+    "smartcard": "^3.7.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
-    "electron": "^34.0.0",
+    "electron": "^34.5.8",
     "electron-builder": "^25.1.8",
     "electron-rebuild": "^3.2.9",
     "vitest": "^3.0.0"
