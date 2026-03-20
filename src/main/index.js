@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, powerMonitor, Menu } = require('electron');
 const path = require('path');
 const net = require('net');
 const { createLogger } = require('./logger');
@@ -102,6 +102,7 @@ function createWindow() {
     show: false,
   });
 
+  Menu.setApplicationMenu(null);
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
 
