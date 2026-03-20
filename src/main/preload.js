@@ -26,6 +26,9 @@ contextBridge.exposeInMainWorld('bridge', {
   // Auth
   login: (credentials) => ipcRenderer.invoke('auth-login', credentials),
   logout: () => ipcRenderer.invoke('auth-logout'),
+  getAuthStatus: () => ipcRenderer.invoke('auth-status'),
+  getClinicList: () => ipcRenderer.invoke('get-clinic-list'),
+  selectBranch: (clinicBranchURL) => ipcRenderer.invoke('select-branch', clinicBranchURL),
 
   // App
   getVersion: () => ipcRenderer.invoke('app-version'),

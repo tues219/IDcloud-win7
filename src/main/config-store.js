@@ -19,7 +19,7 @@ const schema = {
     type: 'object',
     properties: {
       watchFolder: { type: 'string', default: '' },
-      apiBaseUrl: { type: 'string', default: '' },
+      apiBaseUrl: { type: 'string', default: 'https://api.dentcloud.app' },
       clinicBranchURL: { type: 'string', default: '' },
       email: { type: 'string', default: '' },
       autoStart: { type: 'boolean', default: true },

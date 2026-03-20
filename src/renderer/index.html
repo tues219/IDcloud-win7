@@ -81,16 +81,51 @@
     <!-- Xray Panel -->
     <section id="xray" class="panel">
       <h2>Xray Upload</h2>
-      <div id="drop-zone" class="drop-zone">
-        <p>Drop DICOM, JPG, or PNG files here</p>
+
+      <div id="xray-login" class="xray-login">
+        <h3>Sign In to DentCloud</h3>
+        <div class="form-group">
+          <label>Email: <input type="email" id="xray-email"></label>
+        </div>
+        <div class="form-group">
+          <label>Password: <input type="password" id="xray-password"></label>
+        </div>
+        <button id="btn-xray-login" class="btn-primary">Sign In</button>
+        <div id="xray-login-error" class="login-error"></div>
       </div>
-      <div id="queue-stats"></div>
-      <div id="file-list"></div>
-      <div id="assign-panel" style="display:none">
-        <h3>Assign Patient</h3>
-        <input type="text" id="assign-dn" placeholder="Patient DN">
-        <button id="btn-lookup">Lookup</button>
-        <div id="assign-result"></div>
+
+      <div id="xray-branch-select" style="display:none">
+        <div id="xray-user-info-branch">
+          Signed in as: <span id="xray-branch-user-email"></span>
+          <button id="btn-branch-logout">Sign Out</button>
+        </div>
+        <h3>Select Branch</h3>
+        <div id="clinic-list"></div>
+      </div>
+
+      <div id="xray-authenticated" style="display:none">
+        <div id="xray-user-info">
+          Signed in as: <span id="xray-user-email"></span>
+          <button id="btn-xray-logout">Sign Out</button>
+        </div>
+        <div id="drop-zone" class="drop-zone">
+          <p>Drop DICOM, JPG, or PNG files here</p>
+        </div>
+        <div id="queue-stats"></div>
+        <div id="file-list"></div>
+        <div id="assign-panel" style="display:none">
+          <h3>Assign Patient</h3>
+          <div id="assign-file-info"></div>
+          <div class="assign-search">
+            <input type="text" id="assign-dn" placeholder="Enter Patient DN">
+            <button id="btn-lookup" class="btn-primary">Lookup</button>
+          </div>
+          <div id="assign-result"></div>
+          <div id="assign-actions" style="display:none">
+            <button id="btn-assign-confirm" class="btn-primary">Confirm Assignment</button>
+            <button id="btn-assign-cancel">Cancel</button>
+          </div>
+        </div>
       </div>
     </section>
 

@@ -50,6 +50,9 @@ class UploadQueue extends EventEmitter {
 
   async _processItem(item) {
     try {
+      // Items awaiting assignment should not be processed — wait for user action
+      if (item.status === 'awaiting-assignment') return;
+
       item.status = 'processing';
       item.attempts++;
       this.emit('queue-updated', this.getQueueStatus());
@@ -66,7 +69,17 @@ class UploadQueue extends EventEmitter {
       // Upload decision
       item.progress = 20;
       const decision = this.authManager.shouldUpload(item.metadata, searchResults);
-      if (!decision.upload) throw new Error(decision.reason || 'Upload not approved');
+      if (!decision.upload) {
+        item.status = 'awaiting-assignment';
+        item.matchInfo = {
+          reason: decision.reason,
+          dicomPatientId: item.metadata.patientId,
+          dicomPatientName: item.metadata.patientNameFormatted,
+          searchResults: searchResults.patients || [],
+        };
+        this.emit('queue-updated', this.getQueueStatus());
+        return;
+      }
 
       // Get presigned URL
       item.progress = 30;

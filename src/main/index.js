@@ -176,8 +176,29 @@ ipcMain.handle('drop-files', async (_, filePaths) => {
 ipcMain.handle('lookup-patient', (_, dn) => authManager.searchPatientByDN(dn));
 ipcMain.handle('assign-patient', (_, queueItemId, patientInfo) => uploadQueue.assignPatientDN(queueItemId, patientInfo));
 
-ipcMain.handle('auth-login', (_, creds) => authManager.login(creds));
+ipcMain.handle('auth-login', async (_, creds) => {
+  const result = await authManager.login(creds);
+  if (result.success) {
+    const clinics = await authManager.getClinicList();
+    result.clinics = clinics.clinics || [];
+  }
+  return result;
+});
 ipcMain.handle('auth-logout', () => { authManager.logout(); return { success: true }; });
+ipcMain.handle('auth-status', () => ({
+  authenticated: authManager.isAuthenticated(),
+  user: authManager.userInfo,
+  hasBranch: !!(authManager.clinicInfo && authManager.branchInfo),
+}));
+ipcMain.handle('get-clinic-list', () => authManager.getClinicList());
+ipcMain.handle('select-branch', async (_, clinicBranchURL) => {
+  const result = await authManager.validateConfiguration(clinicBranchURL);
+  if (result.success) {
+    const xrayConfig = getConfig('xray');
+    setConfig('xray', { ...xrayConfig, clinicBranchURL });
+  }
+  return result;
+});
 ipcMain.handle('app-version', () => app.getVersion());
 
 // App lifecycle
@@ -203,8 +224,24 @@ async function initModules() {
     logger.error(`Port ${wsPort} is in use`);
   }
 
-  // Auto-start watching if configured
+  // Auto-login if saved credentials exist
   const xrayConfig = getConfig('xray');
+  if (xrayConfig.email) {
+    try {
+      const password = loadCredential('xray-password');
+      if (password) {
+        await authManager.login({ email: xrayConfig.email, password });
+        if (xrayConfig.clinicBranchURL) {
+          await authManager.validateConfiguration(xrayConfig.clinicBranchURL);
+        }
+        logger.info('Auto-login successful', { email: xrayConfig.email });
+      }
+    } catch (err) {
+      logger.error('Auto-login failed (non-fatal)', { error: err.message });
+    }
+  }
+
+  // Auto-start watching if configured
   if (xrayConfig.watchFolder) {
     try {
       await fileWatcher.startWatching(xrayConfig.watchFolder);
