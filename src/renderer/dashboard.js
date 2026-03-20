@@ -5,6 +5,12 @@ const eventLog = [];
 let activeFilter = 'all';
 let persistedLogsLoaded = false;
 
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
 // Tab switching
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -75,6 +81,15 @@ async function refreshStatus() {
 }
 refreshStatus();
 setInterval(refreshStatus, 10000);
+
+// ── Auto-Start Toggle ──
+bridge.getAutoStart().then(enabled => {
+  document.getElementById('chk-auto-start').checked = enabled;
+});
+document.getElementById('chk-auto-start').addEventListener('change', async (e) => {
+  await bridge.setAutoStart(e.target.checked);
+  addLog('info', 'settings', `Start on boot ${e.target.checked ? 'enabled' : 'disabled'}`);
+});
 
 // ── EDC Gear Toggle ──
 document.getElementById('btn-edc-gear').addEventListener('click', () => {
@@ -181,11 +196,11 @@ function renderClinicList(clinics) {
   }
   return clinics.map(clinic => `
     <div class="clinic-card">
-      <div class="clinic-name">${clinic.name || clinic.code}</div>
+      <div class="clinic-name">${esc(clinic.name || clinic.code)}</div>
       <div class="branch-list">
         ${(clinic.branches || []).map(branch => `
-          <button class="branch-btn" data-clinic="${clinic.code}" data-branch="${branch.code}">
-            ${branch.name || branch.code}
+          <button class="branch-btn" data-clinic="${esc(clinic.code)}" data-branch="${esc(branch.code)}">
+            ${esc(branch.name || branch.code)}
           </button>
         `).join('')}
       </div>
@@ -347,15 +362,15 @@ function renderQueue(status) {
   }
   listEl.innerHTML = currentQueueItems.map(item => {
     const dicomInfo = item.metadata && item.metadata.patientNameFormatted
-      ? ` <span class="file-dicom-info">(${item.metadata.patientNameFormatted} / ${item.metadata.patientId || ''})</span>`
+      ? ` <span class="file-dicom-info">(${esc(item.metadata.patientNameFormatted)} / ${esc(item.metadata.patientId || '')})</span>`
       : '';
     const assignBtn = item.status === 'awaiting-assignment'
       ? ` <button class="btn-assign" data-id="${item.id}">Assign</button>`
       : '';
     return `
       <div class="file-item">
-        <span>${item.fileInfo.name}${dicomInfo}</span>
-        <span class="file-status ${item.status}">${item.status}${item.error ? ': ' + item.error : ''}${assignBtn}</span>
+        <span>${esc(item.fileInfo.name)}${dicomInfo}</span>
+        <span class="file-status ${esc(item.status)}">${esc(item.status)}${item.error ? ': ' + esc(item.error) : ''}${assignBtn}</span>
       </div>`;
   }).join('');
 
@@ -381,15 +396,15 @@ function openAssignPanel(item) {
   const resultEl = document.getElementById('assign-result');
   const actionsEl = document.getElementById('assign-actions');
 
-  let info = `<strong>File:</strong> ${item.fileInfo.name}`;
+  let info = `<strong>File:</strong> ${esc(item.fileInfo.name)}`;
   if (item.metadata && item.metadata.patientNameFormatted) {
-    info += `<br><strong>DICOM Patient:</strong> ${item.metadata.patientNameFormatted}`;
+    info += `<br><strong>DICOM Patient:</strong> ${esc(item.metadata.patientNameFormatted)}`;
   }
   if (item.metadata && item.metadata.patientId) {
-    info += ` | <strong>DN:</strong> ${item.metadata.patientId}`;
+    info += ` | <strong>DN:</strong> ${esc(item.metadata.patientId)}`;
   }
   if (item.matchInfo && item.matchInfo.reason) {
-    info += `<br><strong>Reason:</strong> ${item.matchInfo.reason}`;
+    info += `<br><strong>Reason:</strong> ${esc(item.matchInfo.reason)}`;
   }
   fileInfo.innerHTML = info;
 
@@ -417,10 +432,10 @@ function closeAssignPanel() {
 function renderPatientResults(patients) {
   if (!patients || patients.length === 0) return '<div class="no-results">No patients found</div>';
   return patients.map(p => `
-    <div class="patient-card" data-id="${p.id || ''}" data-dn="${p.dn || ''}">
-      <div class="patient-name">${p.fullName || ((p.firstNameEn || '') + ' ' + (p.lastNameEn || '')).trim() || 'Unknown'}</div>
-      <div class="patient-dn">DN: ${p.dn || 'N/A'}</div>
-      <div class="patient-dob">${p.dob || ''}</div>
+    <div class="patient-card" data-id="${esc(String(p.id || ''))}" data-dn="${esc(p.dn || '')}">
+      <div class="patient-name">${esc(p.fullName || ((p.firstNameEn || '') + ' ' + (p.lastNameEn || '')).trim() || 'Unknown')}</div>
+      <div class="patient-dn">DN: ${esc(p.dn || 'N/A')}</div>
+      <div class="patient-dob">${esc(p.dob || '')}</div>
     </div>
   `).join('');
 }
@@ -453,7 +468,7 @@ document.getElementById('btn-lookup').addEventListener('click', async () => {
       resultEl.innerHTML = renderPatientResults(result.patients);
       attachPatientCardHandlers(resultEl);
     } else {
-      resultEl.innerHTML = `<div class="no-results">${result.error || 'No patient found'}</div>`;
+      resultEl.innerHTML = `<div class="no-results">${esc(result.error || 'No patient found')}</div>`;
     }
     document.getElementById('assign-actions').style.display = 'none';
     selectedPatient = null;
@@ -492,20 +507,15 @@ async function loadPersistedLogs() {
     const logs = await bridge.getLogs();
     if (logs && logs.length > 0) {
       // Merge persisted logs (avoid duplicates by checking timestamp)
-      const existingTimes = new Set(eventLog.map(e => e.time));
+      const existingKeys = new Set(eventLog.map(e => e.time + e.module + e.message));
       for (const entry of logs) {
         const time = new Date(entry.timestamp).toLocaleTimeString();
-        if (!existingTimes.has(time + entry.module + entry.message)) {
-          eventLog.push({
-            time,
-            level: entry.level || 'info',
-            module: entry.module || 'system',
-            message: entry.message || '',
-          });
+        const module = entry.module || 'system';
+        const message = entry.message || '';
+        if (!existingKeys.has(time + module + message)) {
+          eventLog.push({ time, level: entry.level || 'info', module, message });
         }
       }
-      // Sort newest first and cap
-      eventLog.sort((a, b) => 0); // keep insertion order (already newest-first from backend)
       if (eventLog.length > 200) eventLog.length = 200;
       renderLog();
     }
@@ -536,7 +546,7 @@ function renderLog() {
   }
 
   el.innerHTML = filtered.slice(0, 200).map(e =>
-    `<div class="log-entry ${e.level}"><span class="time">${e.time}</span> <span class="module">[${e.module}]</span> ${e.message}</div>`
+    `<div class="log-entry ${esc(e.level)}"><span class="time">${esc(e.time)}</span> <span class="module">[${esc(e.module)}]</span> ${esc(e.message)}</div>`
   ).join('');
 }
 

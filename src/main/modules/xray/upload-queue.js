@@ -92,9 +92,9 @@ class UploadQueue extends EventEmitter {
 
       // Upload
       item.progress = 50;
-      const fsSync = require('fs');
+      const fs = require('fs').promises;
       const fetch = require('node-fetch');
-      const fileBuffer = fsSync.readFileSync(item.fileInfo.path);
+      const fileBuffer = await fs.readFile(item.fileInfo.path);
       const response = await fetch(presigned.uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/dicom' },
@@ -114,7 +114,8 @@ class UploadQueue extends EventEmitter {
         setTimeout(() => {
           item.status = 'pending';
           item.error = null;
-          this.processQueue();
+          this.emit('queue-updated', this.getQueueStatus());
+          if (!this.processing) this.processQueue();
         }, 5000);
       }
     }

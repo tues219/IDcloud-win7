@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self'; font-src 'self'">
   <title>DentCloud Hardware Bridge</title>
+  <link rel="stylesheet" href="../../node_modules/@fortawesome/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -35,7 +36,7 @@
           <div class="card-main">
             <div class="card-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/>
               </svg>
             </div>
             <div class="card-body">
@@ -54,9 +55,7 @@
         <div class="status-card card-cardreader">
           <div class="card-main">
             <div class="card-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
-              </svg>
+              <i class="fa-regular fa-id-card"></i>
             </div>
             <div class="card-body">
               <h3>Card Reader</h3>
@@ -74,12 +73,10 @@
         <div class="status-card card-edc">
           <div class="card-main">
             <div class="card-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 21V7"/><path d="M16 21V7"/><path d="M6 11h4"/><path d="M14 11h4"/>
-              </svg>
+              <i class="fa-brands fa-cash-app"></i>
             </div>
             <div class="card-body">
-              <h3>EDC Terminal</h3>
+              <h3>EDC Terminal (DentCloud Payment)</h3>
               <p class="card-desc">Payment device</p>
               <div id="edc-status" class="status-indicator disconnected">
                 <span class="pulse"></span>
@@ -118,9 +115,7 @@
         <div class="status-card card-xray">
           <div class="card-main">
             <div class="card-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>
-              </svg>
+              <i class="fa-solid fa-tooth"></i>
             </div>
             <div class="card-body">
               <h3>X-ray Watcher</h3>
@@ -135,6 +130,11 @@
         </div>
 
       </div>
+
+      <label class="standalone-toggle">
+        <input type="checkbox" id="chk-auto-start">
+        <span>Start on boot</span>
+      </label>
     </section>
 
     <!-- X-ray Panel -->

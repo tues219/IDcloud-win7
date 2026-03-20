@@ -94,6 +94,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 900,
     height: 650,
+    icon: path.join(__dirname, '../../assets/icon.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -230,6 +231,16 @@ ipcMain.handle('get-logs', async () => {
 });
 ipcMain.handle('app-version', () => app.getVersion());
 
+ipcMain.handle('get-auto-start', () => {
+  return app.getLoginItemSettings().openAtLogin;
+});
+
+ipcMain.handle('set-auto-start', (_, enabled) => {
+  app.setLoginItemSettings({ openAtLogin: enabled });
+  setConfig('app', { ...getConfig('app'), autoStart: enabled });
+  return { success: true };
+});
+
 // App lifecycle
 async function initModules() {
   try {
@@ -283,6 +294,11 @@ async function initModules() {
 app.whenReady().then(async () => {
   createWindow();
   createTray(mainWindow, logger);
+
+  // Apply auto-start setting
+  const appConfig = getConfig('app');
+  app.setLoginItemSettings({ openAtLogin: !!appConfig.autoStart });
+
   await initModules();
 
   // Lifecycle: suspend/resume
