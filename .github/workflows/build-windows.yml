@@ -1,5 +1,5 @@
 name: Build Windows x64
-d
+
 on:
   push:
     branches: [release/win-x64]
