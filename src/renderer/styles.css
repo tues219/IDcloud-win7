@@ -272,6 +272,10 @@ nav {
   border-color: var(--brand);
 }
 
+/* ── EDC row: gear & detail on left ── */
+.status-row[data-service="edc"] .svc-name { flex: none; }
+.status-row[data-service="edc"] .svc-state { margin-left: auto; }
+
 /* ── Collapsible Service Settings ── */
 .svc-settings {
   max-height: 0;

@@ -115,17 +115,19 @@ class SerialManager extends EventEmitter {
   async destroy() {
     if (this.port) {
       this.port.removeListener('data', this._onData);
+      this.port.removeAllListeners('error');
+      this.port.removeAllListeners('close');
       if (this.isOpen) {
-        return new Promise((resolve) => {
+        await new Promise((resolve) => {
           this.port.close(() => {
             this.isOpen = false;
             resolve();
           });
         });
       }
+      this.port = null;
     }
     this.buffer = '';
-    this.removeAllListeners();
   }
 
   getStatus() {

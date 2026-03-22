@@ -26,6 +26,7 @@ class EdcInterface extends EventEmitter {
     this.serial.on('disconnected', () => {
       this.status = 'disconnected';
       this.emit('status', { status: 'disconnected' });
+      this._startReconnect();
     });
 
     try {
@@ -167,8 +168,40 @@ class EdcInterface extends EventEmitter {
     };
   }
 
+  _startReconnect() {
+    if (this._reconnectTimer || this._destroyed) return;
+    this.logger.info('Will attempt to reconnect EDC...');
+    this._reconnectTimer = setInterval(async () => {
+      if (this._destroyed) {
+        clearInterval(this._reconnectTimer);
+        this._reconnectTimer = null;
+        return;
+      }
+      this.logger.debug('Attempting EDC reconnection...');
+      try {
+        if (this.serial) {
+          await this.serial.destroy();
+          this.serial = null;
+        }
+        await this.init();
+        clearInterval(this._reconnectTimer);
+        this._reconnectTimer = null;
+      } catch (_) {
+        // init failed, will retry on next interval
+      }
+    }, 5000);
+  }
+
+  _stopReconnect() {
+    if (this._reconnectTimer) {
+      clearInterval(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+  }
+
   async destroy() {
     this._destroyed = true;
+    this._stopReconnect();
     if (this.serial) {
       await this.serial.destroy();
       this.serial = null;
