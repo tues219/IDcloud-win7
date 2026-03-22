@@ -51,7 +51,7 @@ function formatNumberToDigitString(number, digits) {
 }
 
 function formatStringToDigitString(text, digits, padChar = ' ') {
-  return text.padStart(digits, padChar);
+  return String(text || '').padStart(digits, padChar);
 }
 
 function numberDigitStringToString(numberDigit) {
