@@ -41,12 +41,9 @@ class NhsoApplet {
     await delay(this.options.delayMs);
     if (isCancelled()) throw new Error('CARD_REMOVED');
 
-    logger.info('NHSO applet selected');
-
     // maininscl
     try {
       info.maininscl = await this.readField(apduNhso.CMD_MAININSCL, 'tis620');
-      logger.info('Read maininscl');
     } catch (err) {
       info.maininscl = null;
       info._errors.push({ field: 'maininscl', error: err.message });
@@ -57,7 +54,6 @@ class NhsoApplet {
     // subinscl
     try {
       info.subinscl = await this.readField(apduNhso.CMD_SUBINSCL, 'tis620');
-      logger.info('Read subinscl');
     } catch (err) {
       info.subinscl = null;
       info._errors.push({ field: 'subinscl', error: err.message });
@@ -67,7 +63,6 @@ class NhsoApplet {
     // main hospital name
     try {
       info.mainHospitalName = await this.readField(apduNhso.CMD_MAIN_HOSPITAL_NAME, 'tis620');
-      logger.info('Read mainHospitalName');
     } catch (err) {
       info.mainHospitalName = null;
       info._errors.push({ field: 'mainHospitalName', error: err.message });
@@ -129,7 +124,6 @@ class NhsoApplet {
       logger.warn('NHSO field errors', { errors: info._errors });
     }
 
-    logger.info('NHSO read complete');
     return info;
   }
 }

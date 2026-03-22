@@ -182,8 +182,6 @@ class CardReaderModule extends EventEmitter {
     const card = this.currentCard;
     if (!card) return;
 
-    this.logger.debug('Starting active card removal watcher');
-
     this._cardWatchTimer = setInterval(async () => {
       if (this._destroyed || !this.currentCard) {
         this._stopCardWatcher();
@@ -219,21 +217,48 @@ class CardReaderModule extends EventEmitter {
   _startInsertionWatcher() {
     this._stopInsertionWatcher();
 
-    this.logger.debug('Starting active card insertion watcher');
-
     this._insertWatchTimer = setInterval(async () => {
       if (this._destroyed) {
         this._stopInsertionWatcher();
         return;
       }
 
-      // Reinitialize with fresh PCSC context — if a card is present,
-      // the fresh scan will detect it and fire card-inserted
-      this._stopMonitor();
+      // Lightweight check: create temp PCSC context, try to connect to reader
+      let ctx;
       try {
-        await this.init();
+        ctx = new smartcard.Context();
+        const readers = ctx.listReaders();
+        for (const reader of readers) {
+          try {
+            const card = await reader.connect(
+              smartcard.SCARD_SHARE_SHARED,
+              smartcard.SCARD_PROTOCOL_T0 | smartcard.SCARD_PROTOCOL_T1
+            );
+            // Card found — disconnect test connection and do full reinit
+            try { card.disconnect(); } catch (_) {}
+            try { ctx.close(); } catch (_) {}
+            ctx = null;
+
+            this.logger.info('Card presence detected by insertion watcher');
+            this._stopInsertionWatcher();
+            this._stopMonitor();
+            try {
+              await this.init();
+            } catch (initErr) {
+              this.logger.error('Failed to reinit after card detected', { error: initErr.message });
+              this._startReconnect();
+            }
+            return;
+          } catch (_) {
+            // No card in this reader
+          }
+        }
       } catch (_) {
-        this._stopMonitor();
+        // Context creation or listReaders failed
+      } finally {
+        if (ctx) {
+          try { ctx.close(); } catch (_) {}
+        }
       }
     }, 1000);
   }

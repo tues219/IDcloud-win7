@@ -50,13 +50,13 @@ class PersonalApplet {
       0xa0, 0x00, 0x00, 0x00, 0x54, 0x48, 0x00, 0x01,
     ]));
     await delay(this.options.delayMs);
+    logger.info('Reading card...');
 
     if (isCancelled()) throw new Error('CARD_REMOVED');
 
     // CID
     try {
       info.cid = await this.readField(apduPerson.CMD_CID, 'cid');
-      logger.info('Read CID', { cid: info.cid });
     } catch (err) {
       info.cid = null;
       info._errors.push({ field: 'cid', error: err.message });
@@ -74,7 +74,6 @@ class PersonalApplet {
         middlename: parts[2] || '',
         lastname: parts[3] || '',
       };
-      logger.info('Read Thai name');
     } catch (err) {
       info.name = null;
       info._errors.push({ field: 'name', error: err.message });
@@ -92,7 +91,6 @@ class PersonalApplet {
         middlename: parts[2] || '',
         lastname: parts[3] || '',
       };
-      logger.info('Read English name');
     } catch (err) {
       info.nameEN = null;
       info._errors.push({ field: 'nameEn', error: err.message });
@@ -104,7 +102,6 @@ class PersonalApplet {
     try {
       const raw = await this.readField(apduPerson.CMD_BIRTH, 'dob');
       info.dob = `${+raw.slice(0, 4) - 543}-${raw.slice(4, 6)}-${raw.slice(6)}`;
-      logger.info('Read DOB');
     } catch (err) {
       info.dob = null;
       info._errors.push({ field: 'dob', error: err.message });
@@ -114,7 +111,6 @@ class PersonalApplet {
     // Gender
     try {
       info.gender = await this.readField(apduPerson.CMD_GENDER, 'gender');
-      logger.info('Read gender');
     } catch (err) {
       info.gender = null;
       info._errors.push({ field: 'gender', error: err.message });
@@ -165,7 +161,6 @@ class PersonalApplet {
           : '',
         province: parts[parts.length - 1] ? parts[parts.length - 1].trim() : '',
       };
-      logger.info('Read address');
     } catch (err) {
       info.address = null;
       info._errors.push({ field: 'address', error: err.message });
