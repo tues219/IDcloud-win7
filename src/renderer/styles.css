@@ -58,28 +58,36 @@ header {
 .header-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .header-logo {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
+.header-brand > div {
+  border-left: 3px solid #3574a5;
+  padding-left: 12px;
 }
 
 header h1 {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  color: #3574a5;
   letter-spacing: -0.3px;
   line-height: 1.2;
 }
 
 .header-subtitle {
   font-size: 11px;
-  color: var(--text-3);
-  font-weight: 400;
-  letter-spacing: 0.2px;
+  color: #3574a5;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  opacity: 0.65;
 }
 
 .version-badge {
