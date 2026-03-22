@@ -14,73 +14,69 @@ class CardReaderModule extends EventEmitter {
     this.currentCard = null;
     this.currentDevice = null;
     this.lastReadData = null;
-    this.isReading = false; // Mutex lock for reading
+    this.isReading = false;
     this.status = 'disconnected';
-    this._listeners = []; // Track listeners for cleanup
     this._destroyed = false;
     this._reconnectTimer = null;
+    this._readGeneration = 0; // incremented on card removal to cancel stale reads
   }
 
   async init() {
     this._destroyed = false;
+    // Clean up any existing monitor before creating a new one
+    this._stopMonitor();
+    this.status = 'disconnected';
     this.devices = new smartcard.Devices();
 
-    this.devices.on('device-activated', (event) => {
-      const device = event.device;
-      this.currentDevice = device;
+    this.devices.on('reader-attached', (reader) => {
+      this.currentDevice = reader.name;
       this.status = 'connected';
-      this.logger.info('Card reader connected', { device: String(device) });
-      this.emit('status', { status: 'connected', device: String(device) });
+      this.logger.info('Card reader connected', { device: reader.name });
+      this.emit('status', { status: 'connected', device: reader.name });
+    });
 
-      // Use .on but track for cleanup
-      const onCardInserted = async (event) => {
-        if (this._destroyed) return;
-        await delay(300);
-        this.status = 'card-inserted';
-        this.emit('status', { status: 'card-inserted' });
+    this.devices.on('card-inserted', async (event) => {
+      if (this._destroyed) return;
+      await delay(300);
+      if (this._destroyed) return;
 
-        const card = event.card;
-        this.currentCard = card;
-        const atr = card.getAtr();
-        const readerConfig = getReaderConfig(atr);
-        this.logger.info('Card inserted', { atr, readerType: readerConfig.readerType });
+      this.status = 'card-inserted';
+      this.emit('status', { status: 'card-inserted' });
 
-        try {
-          await this._readCardData(card, readerConfig);
-        } catch (err) {
+      const card = event.card;
+      this.currentCard = card;
+      const atr = Buffer.isBuffer(card.atr) ? card.atr.toString('hex') : String(card.atr || '');
+      const readerConfig = getReaderConfig(atr);
+      this.logger.info('Card inserted', { atr, readerType: readerConfig.readerType });
+
+      try {
+        await this._readCardData(card, readerConfig);
+      } catch (err) {
+        // Only update status if card is still present (not a stale read)
+        if (this.currentCard === card) {
           this.logger.error('Card read failed', { error: err.message });
           this.status = 'error';
           this.emit('status', { status: 'error', error: err.message });
-          // Reset state after error
           this.currentCard = null;
           this.lastReadData = null;
           this.isReading = false;
         }
-      };
-
-      const onCardRemoved = (event) => {
-        this.logger.info('Card removed');
-        this.currentCard = null;
-        this.lastReadData = null;
-        this.isReading = false;
-        this.status = 'connected';
-        this.emit('status', { status: 'connected' });
-      };
-
-      const onDeviceError = (event) => {
-        this.logger.error('Device error');
-        this.status = 'error';
-        this.emit('status', { status: 'error', error: 'Device error' });
-      };
-
-      device.on('card-inserted', onCardInserted);
-      device.on('card-removed', onCardRemoved);
-      device.on('error', onDeviceError);
-      this._listeners.push({ target: device, events: { 'card-inserted': onCardInserted, 'card-removed': onCardRemoved, 'error': onDeviceError } });
+      }
     });
 
-    this.devices.on('device-deactivated', (event) => {
+    this.devices.on('card-removed', () => {
+      this.logger.info('Card removed');
+      this._readGeneration++; // cancel any in-progress read
+      this.currentCard = null;
+      this.lastReadData = null;
+      this.isReading = false;
+      this.status = 'connected';
+      this.emit('status', { status: 'connected' });
+    });
+
+    this.devices.on('reader-detached', () => {
       this.logger.warn('Card reader disconnected');
+      this._readGeneration++;
       this.currentDevice = null;
       this.currentCard = null;
       this.lastReadData = null;
@@ -91,11 +87,23 @@ class CardReaderModule extends EventEmitter {
     });
 
     this.devices.on('error', (error) => {
-      this.logger.error('Smart card system error', { error: error.error || error.message });
-      this.status = 'error';
-      this.emit('status', { status: 'error', error: error.error || error.message });
+      const msg = error.message || String(error);
+      // Only log once, then stop monitor and reconnect
+      if (this.status !== 'error') {
+        this.logger.error('Smart card system error', { error: msg });
+        this.status = 'error';
+        this._readGeneration++;
+        this.currentDevice = null;
+        this.currentCard = null;
+        this.lastReadData = null;
+        this.isReading = false;
+        this.emit('status', { status: 'disconnected' });
+        this._stopMonitor();
+        this._startReconnect();
+      }
     });
 
+    this.devices.start();
     this.logger.info('Card reader module initialized');
   }
 
@@ -106,34 +114,45 @@ class CardReaderModule extends EventEmitter {
       return;
     }
     this.isReading = true;
+    const gen = this._readGeneration;
 
     try {
       // 10 second timeout for entire read operation
-      const readPromise = this._performRead(card, readerConfig);
+      const readPromise = this._performRead(card, readerConfig, gen);
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('READ_TIMEOUT')), 10000)
       );
 
       const data = await Promise.race([readPromise, timeoutPromise]);
+
+      // Check if card was removed during read
+      if (gen !== this._readGeneration) return;
+
       this.lastReadData = data;
       this.status = 'read-complete';
       this.emit('card-data', data);
       this.emit('status', { status: 'read-complete' });
       this.logger.info('Card read complete');
     } finally {
-      this.isReading = false;
+      if (gen === this._readGeneration) {
+        this.isReading = false;
+      }
     }
   }
 
-  async _performRead(card, readerConfig) {
+  async _performRead(card, readerConfig, gen) {
     const req = readerConfig.req;
     const options = { delayMs: readerConfig.delayMs, commandTimeout: 5000 };
 
     const personalApplet = new PersonalApplet(card, req, options);
-    const personal = await personalApplet.getInfo(this.logger);
+    const personal = await personalApplet.getInfo(this.logger, () => gen !== this._readGeneration);
+
+    if (gen !== this._readGeneration) throw new Error('CARD_REMOVED');
 
     const nhsoApplet = new NhsoApplet(card, req, options);
-    const nhso = await nhsoApplet.getInfo(this.logger);
+    const nhso = await nhsoApplet.getInfo(this.logger, () => gen !== this._readGeneration);
+
+    if (gen !== this._readGeneration) throw new Error('CARD_REMOVED');
 
     return { ...personal, nhso };
   }
@@ -174,16 +193,34 @@ class CardReaderModule extends EventEmitter {
     return personal;
   }
 
+  _stopMonitor() {
+    if (this.devices) {
+      try { this.devices.stop(); } catch (_) {}
+      this.devices.removeAllListeners();
+      this.devices = null;
+    }
+  }
+
   _startReconnect() {
     if (this._reconnectTimer || this._destroyed) return;
-    this._reconnectTimer = setInterval(() => {
-      if (this.currentDevice || this._destroyed) {
+    this.logger.info('Will attempt to reconnect card reader...');
+    this._reconnectTimer = setInterval(async () => {
+      if (this._destroyed) {
         clearInterval(this._reconnectTimer);
         this._reconnectTimer = null;
         return;
       }
-      this.logger.debug('Waiting for card reader reconnection...');
-    }, 3000);
+      this.logger.debug('Attempting card reader reconnection...');
+      try {
+        await this.init();
+        // If init() succeeded without throwing, stop reconnect timer
+        clearInterval(this._reconnectTimer);
+        this._reconnectTimer = null;
+      } catch (_) {
+        // init failed, will retry on next interval
+        this._stopMonitor();
+      }
+    }, 5000);
   }
 
   getStatus() {
@@ -197,17 +234,12 @@ class CardReaderModule extends EventEmitter {
 
   async destroy() {
     this._destroyed = true;
+    this._readGeneration++;
     if (this._reconnectTimer) {
       clearInterval(this._reconnectTimer);
       this._reconnectTimer = null;
     }
-    // Cleanup all event listeners
-    for (const { target, events } of this._listeners) {
-      for (const [event, handler] of Object.entries(events)) {
-        target.removeListener(event, handler);
-      }
-    }
-    this._listeners = [];
+    this._stopMonitor();
     this.currentCard = null;
     this.currentDevice = null;
     this.lastReadData = null;

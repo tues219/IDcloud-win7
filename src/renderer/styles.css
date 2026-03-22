@@ -233,6 +233,19 @@ nav {
   animation: pulseA 1.2s ease infinite;
 }
 
+.status-indicator.card-inserted { background: var(--amber-surface); color: var(--amber); }
+.status-indicator.card-inserted .pulse {
+  background: var(--amber);
+  animation: pulseA 1.2s ease infinite;
+}
+
+.status-indicator.read-complete { background: var(--green-surface); color: var(--green); }
+.status-indicator.read-complete .pulse {
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(11, 138, 87, 0.15);
+  animation: pulseG 2s ease infinite;
+}
+
 .status-indicator.error { background: var(--red-surface); color: var(--red); }
 .status-indicator.error .pulse {
   background: var(--red);

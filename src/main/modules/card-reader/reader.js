@@ -1,5 +1,3 @@
-const { CommandApdu } = require('smartcard');
-
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -14,10 +12,9 @@ function getStatusWord(buffer) {
   return { sw1, sw2, sw };
 }
 
-// NEW: timeout wrapper that was missing in original code
-async function issueCommandWithTimeout(card, cmd, timeoutMs = 5000) {
+async function transmitWithTimeout(card, bytes, timeoutMs = 5000) {
   return Promise.race([
-    card.issueCommand(cmd),
+    card.transmit(Buffer.from(bytes)),
     new Promise((_, reject) =>
       setTimeout(() => reject(new Error('COMMAND_TIMEOUT')), timeoutMs)
     )
@@ -25,14 +22,15 @@ async function issueCommandWithTimeout(card, cmd, timeoutMs = 5000) {
 }
 
 async function getData(card, command, req = [0x00, 0xc0, 0x00, 0x00], options = {}) {
-  const { retries = 3, delayMs = 100, commandTimeout = 5000, onRetry } = options;
+  const { retries = 3, delayMs = 100, commandTimeout = 5000, isCancelled } = options;
   let lastError;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
+    if (isCancelled && isCancelled()) throw new Error('CARD_REMOVED');
     try {
-      const selectResponse = await issueCommandWithTimeout(
+      const selectResponse = await transmitWithTimeout(
         card,
-        new CommandApdu({ bytes: command }),
+        command,
         commandTimeout
       );
 
@@ -45,9 +43,9 @@ async function getData(card, command, req = [0x00, 0xc0, 0x00, 0x00], options = 
         expectedLength = selectSw.sw2;
       }
 
-      const data = await issueCommandWithTimeout(
+      const data = await transmitWithTimeout(
         card,
-        new CommandApdu({ bytes: [...req, expectedLength] }),
+        [...req, expectedLength],
         commandTimeout
       );
 
@@ -56,9 +54,9 @@ async function getData(card, command, req = [0x00, 0xc0, 0x00, 0x00], options = 
         return data;
       }
       if (dataSw.sw1 === 0x6c) {
-        const corrected = await issueCommandWithTimeout(
+        const corrected = await transmitWithTimeout(
           card,
-          new CommandApdu({ bytes: [...req, dataSw.sw2] }),
+          [...req, dataSw.sw2],
           commandTimeout
         );
         return corrected;
@@ -66,11 +64,10 @@ async function getData(card, command, req = [0x00, 0xc0, 0x00, 0x00], options = 
 
       return data;
     } catch (err) {
+      if (isCancelled && isCancelled()) throw new Error('CARD_REMOVED');
       lastError = err;
       if (attempt < retries) {
-        // Exponential backoff: 50ms → 100ms → 200ms
         const backoffMs = delayMs * Math.pow(2, attempt - 1);
-        if (onRetry) onRetry(attempt, err);
         await delay(backoffMs);
       }
     }
@@ -79,4 +76,4 @@ async function getData(card, command, req = [0x00, 0xc0, 0x00, 0x00], options = 
   throw lastError;
 }
 
-module.exports = { getData, delay, getStatusWord, issueCommandWithTimeout };
+module.exports = { getData, delay, getStatusWord, transmitWithTimeout };

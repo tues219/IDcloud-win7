@@ -47,6 +47,15 @@ bridge.onQueueUpdate((status) => {
   renderQueue(status);
 });
 
+const STATUS_LABELS = {
+  'connected': 'Connected',
+  'disconnected': 'Disconnected',
+  'card-inserted': 'Card Inserted',
+  'read-complete': 'Read Complete',
+  'processing': 'Processing',
+  'error': 'Error',
+};
+
 function updateStatus(module, status, error) {
   const elId = module === 'cardReader' ? 'card-reader' : module;
   const el = document.getElementById(`${elId}-status`);
@@ -58,11 +67,11 @@ function updateStatus(module, status, error) {
   // Update the status text inside the indicator
   const textEl = el.querySelector('.status-text');
   if (textEl) {
-    textEl.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+    textEl.textContent = STATUS_LABELS[status] || status.charAt(0).toUpperCase() + status.slice(1);
   }
 
   const detail = document.getElementById(`${elId}-detail`);
-  if (detail && error) detail.textContent = error;
+  if (detail) detail.textContent = error || '';
 }
 
 // Initial status fetch
