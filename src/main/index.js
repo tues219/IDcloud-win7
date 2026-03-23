@@ -259,7 +259,8 @@ async function initModules() {
     if (!edcConfig.comPort) {
       const { SerialPort } = require('serialport');
       const ports = await SerialPort.list();
-      const quectel = ports.find(p => p.friendlyName && p.friendlyName.includes('Quectel USB AT Port'));
+      const quectelPorts = ports.filter(p => p.friendlyName && p.friendlyName.includes('Quectel USB AT Port'));
+      const quectel = quectelPorts.length ? quectelPorts[quectelPorts.length - 1] : null;
       if (quectel) {
         setConfig('edc', { ...edcConfig, comPort: quectel.path });
         edcConfig = getConfig('edc');

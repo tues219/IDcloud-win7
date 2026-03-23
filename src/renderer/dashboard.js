@@ -154,7 +154,8 @@ async function populateComPorts(selectedPort) {
     select.value = selectedPort;
   } else {
     // Auto-select Quectel USB AT Port
-    const quectel = ports.find(p => p.friendlyName && p.friendlyName.includes('Quectel USB AT Port'));
+    const quectelPorts = ports.filter(p => p.friendlyName && p.friendlyName.includes('Quectel USB AT Port'));
+    const quectel = quectelPorts.length ? quectelPorts[quectelPorts.length - 1] : null;
     if (quectel) select.value = quectel.path;
   }
 }
