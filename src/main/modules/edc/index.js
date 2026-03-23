@@ -16,40 +16,39 @@ class EdcInterface extends EventEmitter {
 
   async init() {
     this._destroyed = false;
+    this.status = 'ready';
+    this.emit('status', { status: 'ready' });
+    this.logger.info('EDC interface ready', { port: this.config.comPort });
+  }
+
+  async _connect() {
     this.serial = new SerialManager(this.config, this.logger);
+    await this.serial.init();
+  }
 
-    this.serial.on('error', (err) => {
-      this.status = 'error';
-      this.emit('status', { status: 'error', error: err.message });
-    });
-
-    this.serial.on('disconnected', () => {
-      this.status = 'disconnected';
-      this.emit('status', { status: 'disconnected' });
-      this._startReconnect();
-    });
-
-    try {
-      await this.serial.init();
-      this.status = 'connected';
-      this.emit('status', { status: 'connected' });
-      this.logger.info('EDC interface initialized');
-    } catch (err) {
-      this.status = 'error';
-      this.logger.error('EDC init failed', { error: err.message });
-      throw err;
+  async _disconnect() {
+    if (this.serial) {
+      await this.serial.destroy();
+      this.serial = null;
     }
   }
 
   async processTransaction(txCode, data) {
-    if (this.status !== 'connected') {
-      throw new Error('EDC not connected');
+    if (this.status === 'processing') {
+      throw new Error('EDC busy');
+    }
+    if (!this.config.comPort) {
+      throw new Error('EDC not configured');
     }
 
-    this.logger.info('Starting transaction', { txCode, data });
+    this.status = 'processing';
     this.emit('status', { status: 'processing' });
+    this.logger.info('Starting transaction', { txCode, data });
 
     try {
+      // 0. Connect
+      await this._connect();
+
       // 1. Build message
       let msg;
       switch (txCode) {
@@ -81,28 +80,16 @@ class EdcInterface extends EventEmitter {
           throw new Error(`Unknown transaction code: ${txCode}`);
       }
 
-      // 2. Send + wait ACK (with retry)
+      // 2. Send + wait ACK (single attempt, 5s timeout)
       const ackTimeout = this.config.ackTimeout || 5000;
-      const maxRetries = this.config.retryCount || 3;
+      await this.serial.send(msg);
+      this.logger.info('Message sent, waiting for ACK');
 
-      for (let retry = 0; retry < maxRetries; retry++) {
-        await this.serial.send(msg);
-        this.logger.info(`Message sent, waiting for ACK (attempt ${retry + 1}/${maxRetries})`);
-
-        try {
-          await Promise.race([
-            this._waitForAck(),
-            this._timeout(ackTimeout, 'EDC_ACK_TIMEOUT')
-          ]);
-          this.logger.info('ACK received');
-          break;
-        } catch (err) {
-          if (retry === maxRetries - 1) {
-            throw new Error('EDC_NO_ACK');
-          }
-          this.logger.warn(`ACK timeout, retry ${retry + 1}/${maxRetries}`);
-        }
-      }
+      await Promise.race([
+        this._waitForAck(),
+        this._timeout(ackTimeout, 'EDC_NO_ACK')
+      ]);
+      this.logger.info('ACK received');
 
       // 3. Wait response (with timeout)
       const responseTimeout = this.config.responseTimeout || 60000;
@@ -131,15 +118,14 @@ class EdcInterface extends EventEmitter {
         fields: parsed.FieldDatas,
       });
 
-      this.status = 'connected';
-      this.emit('status', { status: 'connected' });
-
       return parsed;
     } catch (err) {
-      this.status = 'connected';
-      this.emit('status', { status: 'connected' });
       this.logger.error('Transaction failed', { txCode, error: err.message });
       throw err;
+    } finally {
+      await this._disconnect();
+      this.status = 'ready';
+      this.emit('status', { status: 'ready' });
     }
   }
 
@@ -168,44 +154,9 @@ class EdcInterface extends EventEmitter {
     };
   }
 
-  _startReconnect() {
-    if (this._reconnectTimer || this._destroyed) return;
-    this.logger.info('Will attempt to reconnect EDC...');
-    this._reconnectTimer = setInterval(async () => {
-      if (this._destroyed) {
-        clearInterval(this._reconnectTimer);
-        this._reconnectTimer = null;
-        return;
-      }
-      this.logger.debug('Attempting EDC reconnection...');
-      try {
-        if (this.serial) {
-          await this.serial.destroy();
-          this.serial = null;
-        }
-        await this.init();
-        clearInterval(this._reconnectTimer);
-        this._reconnectTimer = null;
-      } catch (_) {
-        // init failed, will retry on next interval
-      }
-    }, 5000);
-  }
-
-  _stopReconnect() {
-    if (this._reconnectTimer) {
-      clearInterval(this._reconnectTimer);
-      this._reconnectTimer = null;
-    }
-  }
-
   async destroy() {
     this._destroyed = true;
-    this._stopReconnect();
-    if (this.serial) {
-      await this.serial.destroy();
-      this.serial = null;
-    }
+    await this._disconnect();
     this.status = 'disconnected';
     this.removeAllListeners();
     this.logger.info('EDC interface destroyed');
