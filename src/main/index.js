@@ -343,10 +343,8 @@ app.whenReady().then(async () => {
   powerMonitor.on('resume', async () => {
     logger.info('System resuming, reinitializing');
     try { await cardReader.init(); } catch (err) { logger.error('Card reader reinit failed', { error: err.message }); }
-    try {
-      edc.config = getConfig('edc');
-      if (edc.config.comPort) await edc.init();
-    } catch (err) { logger.error('EDC reinit failed', { error: err.message }); }
+    edc.config = getConfig('edc');
+    if (edc.config.comPort) await edc.init();
   });
 });
 

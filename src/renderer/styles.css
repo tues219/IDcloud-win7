@@ -189,7 +189,7 @@ nav {
   transition: background 0.3s, box-shadow 0.3s;
 }
 
-.svc-dot.connected, .svc-dot.read-complete {
+.svc-dot.ready, .svc-dot.connected, .svc-dot.read-complete {
   background: var(--green);
   box-shadow: 0 0 0 3px rgba(26, 122, 82, 0.12);
   animation: dotPulseG 2.5s ease infinite;

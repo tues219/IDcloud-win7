@@ -48,6 +48,7 @@ bridge.onQueueUpdate((status) => {
 });
 
 const STATUS_LABELS = {
+  'ready': 'Ready',
   'connected': 'Connected',
   'disconnected': 'Disconnected',
   'card-inserted': 'Card Inserted',
@@ -75,8 +76,8 @@ function updateStatus(module, status, error) {
   if (detail) {
     if (error) {
       detail.textContent = error;
-    } else if (module === 'edc' && status === 'connected') {
-      // Restore port name when EDC reconnects
+    } else if (module === 'edc' && (status === 'connected' || status === 'ready')) {
+      // Show port name when EDC is ready/connected
       bridge.getConfig().then(cfg => {
         if (cfg.edc && cfg.edc.comPort) detail.textContent = cfg.edc.comPort;
       });
