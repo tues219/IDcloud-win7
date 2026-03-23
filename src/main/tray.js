@@ -66,7 +66,7 @@ function createTray(mainWindow, logger) {
 }
 
 function showNotification(title, body) {
-  if (tray && process.platform === 'win32') {
+  if (tray) {
     tray.displayBalloon({ iconType: 'info', title, content: body });
   }
 }

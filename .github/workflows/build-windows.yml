@@ -2,9 +2,9 @@ name: Build Windows x64 (Win7 Compatible)
 
 on:
   push:
-    branches: [release/win-x64]
+    branches: [release/win7]
   pull_request:
-    branches: [release/win-x64]
+    branches: [release/win7]
   workflow_dispatch:
     inputs:
       branch:
