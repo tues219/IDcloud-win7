@@ -1,6 +1,6 @@
 {
   "name": "dentcloud-hardware-bridge",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "DentCloud Hardware Bridge - Card Reader, EDC, Xray Uploader",
   "main": "src/main/index.js",
   "scripts": {
@@ -58,17 +58,9 @@
     "mac": {
       "target": [
         {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        },
-        {
           "target": "zip",
           "arch": [
-            "arm64",
-            "x64"
+            "arm64"
           ]
         }
       ],
