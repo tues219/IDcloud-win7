@@ -13,6 +13,7 @@ class SerialManager extends EventEmitter {
     this.port = null;
     this.buffer = '';
     this.isOpen = false;
+    this._expectAck = false;
     this._onData = this._handleData.bind(this); // Single handler, bound once
   }
 
@@ -58,17 +59,25 @@ class SerialManager extends EventEmitter {
     });
   }
 
+  expectAck() {
+    this._expectAck = true;
+  }
+
   _handleData(chunk) {
     // Accumulate incoming data
     this.buffer += chunk.toString('binary');
 
-    // Check for ACK byte
-    for (let i = 0; i < this.buffer.length; i++) {
-      if (this.buffer.charCodeAt(i) === ACK_BYTE) {
-        this.emit('ack');
-        // Remove ACK from buffer
-        this.buffer = this.buffer.substring(0, i) + this.buffer.substring(i + 1);
-        break;
+    // Only scan for ACK byte when expecting one (before response arrives)
+    // Prevents stripping 0x06 bytes from response data which corrupts LRC checksum
+    if (this._expectAck) {
+      for (let i = 0; i < this.buffer.length; i++) {
+        if (this.buffer.charCodeAt(i) === ACK_BYTE) {
+          this._expectAck = false;
+          this.emit('ack');
+          // Remove ACK from buffer
+          this.buffer = this.buffer.substring(0, i) + this.buffer.substring(i + 1);
+          break;
+        }
       }
     }
 
@@ -128,6 +137,7 @@ class SerialManager extends EventEmitter {
       this.port = null;
     }
     this.buffer = '';
+    this._expectAck = false;
   }
 
   getStatus() {
