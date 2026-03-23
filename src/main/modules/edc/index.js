@@ -82,6 +82,7 @@ class EdcInterface extends EventEmitter {
 
       // 2. Send + wait ACK (single attempt, 5s timeout)
       const ackTimeout = this.config.ackTimeout || 5000;
+      this.serial.expectAck();
       await this.serial.send(msg);
       this.logger.info('Message sent, waiting for ACK');
 
