@@ -1,4 +1,4 @@
-name: Build Windows x64
+name: Build Windows x64 (Win7 Compatible)
 
 on:
   push:
@@ -57,7 +57,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DentCloud-Hardware-Bridge-win-x64
+          name: DentCloud-Hardware-Bridge-win7-x64
           path: |
             dist/*.exe
             dist/*.msi

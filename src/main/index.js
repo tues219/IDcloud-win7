@@ -1,18 +1,12 @@
-const { app, BrowserWindow, ipcMain, dialog, powerMonitor, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, powerMonitor, Menu } = require('electron');
 const path = require('path');
 const net = require('net');
 const { createLogger } = require('./logger');
-const { getConfig, setConfig, saveCredential, loadCredential } = require('./config-store');
+const { getConfig, setConfig } = require('./config-store');
 const { createTray, showNotification, destroyTray } = require('./tray');
 const CardReaderModule = require('./modules/card-reader');
 const EdcInterface = require('./modules/edc');
-const FileWatcher = require('./modules/xray/file-watcher');
-const DicomProcessor = require('./modules/xray/dicom-processor');
-const ImageProcessor = require('./modules/xray/image-processor');
-const UploadQueue = require('./modules/xray/upload-queue');
-const AuthManager = require('./modules/xray/auth-manager');
 const WsServer = require('../ws-server');
-const { listSerialPorts } = require('./modules/edc/list-ports');
 
 const logger = createLogger('main');
 
@@ -28,40 +22,10 @@ let mainWindow = null;
 // Modules
 const cardLogger = createLogger('card-reader');
 const edcLogger = createLogger('edc');
-const xrayLogger = createLogger('xray');
 
 const cardReader = new CardReaderModule(cardLogger, getConfig('cardReader'));
 const edc = new EdcInterface(getConfig('edc'), edcLogger);
-const fileWatcher = new FileWatcher(xrayLogger);
-const dicomProcessor = new DicomProcessor(xrayLogger);
-const imageProcessor = new ImageProcessor(xrayLogger);
-const uploadQueue = new UploadQueue(xrayLogger);
-const authManager = new AuthManager(xrayLogger, { getConfig, saveCredential, loadCredential });
 const wsServer = new WsServer({ cardReader, edc });
-
-uploadQueue.setAuthManager(authManager);
-
-// File detection handler
-fileWatcher.setFileDetectedHandler(async (fileInfo) => {
-  let result;
-  if (fileInfo.fileType === 'dicom') {
-    result = await dicomProcessor.processDicomFile(fileInfo.path);
-  } else {
-    result = await imageProcessor.processImageFile(fileInfo.path);
-  }
-
-  if (result.success) {
-    uploadQueue.addToQueue(fileInfo, result.metadata);
-    if (mainWindow) {
-      mainWindow.webContents.send('bridge-event', { type: 'file-detected', fileInfo, metadata: result.metadata });
-    }
-  }
-});
-
-// Queue events
-uploadQueue.on('queue-updated', (status) => {
-  if (mainWindow) mainWindow.webContents.send('queue-updated', status);
-});
 
 // Card reader events
 cardReader.on('status', (data) => {
@@ -125,7 +89,6 @@ function createWindow() {
 ipcMain.handle('get-status', () => ({
   cardReader: cardReader.getStatus(),
   edc: edc.getStatus(),
-  xray: { fileWatcher: fileWatcher.getStatus(), queue: uploadQueue.getQueueStatus() },
   ws: { port: getConfig('ws').port || 9900 },
 }));
 
@@ -141,67 +104,6 @@ ipcMain.handle('edc-transaction', async (_, txCode, data) => {
   return edc.processTransaction(txCode, data);
 });
 
-ipcMain.handle('select-folder', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory'],
-    title: 'Select Watch Folder',
-  });
-  if (result.canceled) return { success: false, canceled: true };
-  return { success: true, path: result.filePaths[0] };
-});
-
-ipcMain.handle('start-watching', (_, folder) => fileWatcher.startWatching(folder));
-ipcMain.handle('stop-watching', () => fileWatcher.stopWatching());
-ipcMain.handle('get-upload-queue', () => uploadQueue.getQueueStatus());
-
-ipcMain.handle('drop-files', async (_, filePaths) => {
-  for (const filePath of filePaths) {
-    const ext = path.extname(filePath).toLowerCase();
-    const isDicom = ['.dcm', '.dicom'].includes(ext);
-    const fileInfo = {
-      path: filePath,
-      name: path.basename(filePath),
-      extension: ext,
-      fileType: isDicom ? 'dicom' : 'image',
-      detectedAt: new Date().toISOString(),
-    };
-    let result;
-    if (isDicom) {
-      result = await dicomProcessor.processDicomFile(filePath);
-    } else {
-      result = await imageProcessor.processImageFile(filePath);
-    }
-    if (result.success) uploadQueue.addToQueue(fileInfo, result.metadata);
-  }
-  return { success: true };
-});
-
-ipcMain.handle('lookup-patient', (_, dn) => authManager.searchPatientByDN(dn));
-ipcMain.handle('assign-patient', (_, queueItemId, patientInfo) => uploadQueue.assignPatientDN(queueItemId, patientInfo));
-
-ipcMain.handle('auth-login', async (_, creds) => {
-  const result = await authManager.login(creds);
-  if (result.success) {
-    const clinics = await authManager.getClinicList();
-    result.clinics = clinics.clinics || [];
-  }
-  return result;
-});
-ipcMain.handle('auth-logout', () => { authManager.logout(); return { success: true }; });
-ipcMain.handle('auth-status', () => ({
-  authenticated: authManager.isAuthenticated(),
-  user: authManager.userInfo,
-  hasBranch: !!(authManager.clinicInfo && authManager.branchInfo),
-}));
-ipcMain.handle('get-clinic-list', () => authManager.getClinicList());
-ipcMain.handle('select-branch', async (_, clinicBranchURL) => {
-  const result = await authManager.validateConfiguration(clinicBranchURL);
-  if (result.success) {
-    const xrayConfig = getConfig('xray');
-    setConfig('xray', { ...xrayConfig, clinicBranchURL });
-  }
-  return result;
-});
 ipcMain.handle('get-logs', async () => {
   const fs = require('fs');
   const logsDir = path.join(app.getPath('userData'), 'logs');
@@ -211,7 +113,7 @@ ipcMain.handle('get-logs', async () => {
       .filter(f => f.endsWith('.log') && !f.includes('edc-transactions'))
       .sort()
       .reverse()
-      .slice(0, 7); // read last 7 days of log files
+      .slice(0, 7);
     const entries = [];
     for (const file of files) {
       const content = fs.readFileSync(path.join(logsDir, file), 'utf8');
@@ -222,7 +124,6 @@ ipcMain.handle('get-logs', async () => {
         } catch { /* skip malformed lines */ }
       }
     }
-    // Sort newest first, cap at 200
     entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     return entries.slice(0, 200);
   } catch (err) {
@@ -231,7 +132,8 @@ ipcMain.handle('get-logs', async () => {
   }
 });
 ipcMain.handle('list-serial-ports', async () => {
-  return listSerialPorts();
+  const { SerialPort } = require('serialport');
+  return SerialPort.list();
 });
 
 ipcMain.handle('app-version', () => app.getVersion());
@@ -246,13 +148,6 @@ ipcMain.handle('set-auto-start', (_, enabled) => {
   return { success: true };
 });
 
-ipcMain.handle('restart-app', () => {
-  logger.info('App restart requested by user');
-  app.isQuitting = true;
-  app.relaunch();
-  app.quit();
-});
-
 // App lifecycle
 async function initModules() {
   try {
@@ -263,19 +158,10 @@ async function initModules() {
 
   try {
     let edcConfig = getConfig('edc');
-    const ports = await listSerialPorts();
-
-    if (edcConfig.comPort) {
-      const portExists = ports.some(p => p.path === edcConfig.comPort);
-      if (!portExists) {
-        logger.warn('Saved COM port not found, re-detecting', { savedPort: edcConfig.comPort });
-        edcConfig = { ...edcConfig, comPort: '' };
-      }
-    }
-
     if (!edcConfig.comPort) {
-      const quectelPorts = ports.filter(p => p.friendlyName && p.friendlyName.includes('Quectel USB AT Port'));
-      const quectel = quectelPorts.length ? quectelPorts[quectelPorts.length - 1] : null;
+      const { SerialPort } = require('serialport');
+      const ports = await SerialPort.list();
+      const quectel = ports.find(p => p.friendlyName && p.friendlyName.includes('Quectel USB AT Port'));
       if (quectel) {
         setConfig('edc', { ...edcConfig, comPort: quectel.path });
         edcConfig = getConfig('edc');
@@ -295,45 +181,17 @@ async function initModules() {
   } else {
     logger.error(`Port ${wsPort} is in use`);
   }
-
-  // Auto-login if saved credentials exist
-  const xrayConfig = getConfig('xray');
-  if (xrayConfig.email) {
-    try {
-      const password = loadCredential('xray-password');
-      if (password) {
-        await authManager.login({ email: xrayConfig.email, password });
-        if (xrayConfig.clinicBranchURL) {
-          await authManager.validateConfiguration(xrayConfig.clinicBranchURL);
-        }
-        logger.info('Auto-login successful', { email: xrayConfig.email });
-      }
-    } catch (err) {
-      logger.error('Auto-login failed (non-fatal)', { error: err.message });
-    }
-  }
-
-  // Auto-start watching if configured
-  if (xrayConfig.watchFolder) {
-    try {
-      await fileWatcher.startWatching(xrayConfig.watchFolder);
-    } catch (err) {
-      logger.error('Auto-watch failed', { error: err.message });
-    }
-  }
 }
 
 app.whenReady().then(async () => {
   createWindow();
   createTray(mainWindow, logger);
 
-  // Apply auto-start setting
   const appConfig = getConfig('app');
   app.setLoginItemSettings({ openAtLogin: !!appConfig.autoStart });
 
   await initModules();
 
-  // Lifecycle: suspend/resume
   powerMonitor.on('suspend', async () => {
     logger.info('System suspending, cleaning up');
     await cardReader.destroy();
@@ -363,7 +221,6 @@ app.on('before-quit', async () => {
   wsServer.stop();
   await cardReader.destroy();
   await edc.destroy();
-  await fileWatcher.stopWatching();
   destroyTray();
   logger.info('Application shutting down');
 });

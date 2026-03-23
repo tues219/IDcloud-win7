@@ -23,7 +23,6 @@
 
     <nav>
       <button class="tab active" data-tab="status">Dashboard</button>
-      <button class="tab" data-tab="xray">X-ray</button>
       <button class="tab" data-tab="log">Event Log</button>
     </nav>
 
@@ -78,113 +77,12 @@
           </div>
         </div>
 
-        <div class="status-row" data-service="xray">
-          <span class="svc-dot disconnected" id="xray-dot"></span>
-          <span class="svc-name">X-ray Watcher</span>
-          <span class="svc-state" id="xray-status">Stopped</span>
-          <span class="svc-detail" id="xray-detail"></span>
-        </div>
-
       </div>
 
       <label class="standalone-toggle">
         <input type="checkbox" id="chk-auto-start">
         <span>Start on boot</span>
       </label>
-    </section>
-
-    <!-- X-ray Panel -->
-    <section id="xray" class="panel">
-
-      <!-- Collapsible X-ray Configuration -->
-      <div class="xray-config-bar">
-        <div class="config-bar-header" id="xray-config-toggle">
-          <h3>X-ray Configuration</h3>
-          <svg class="config-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </div>
-        <div class="config-bar-body" id="xray-config-body">
-          <div class="config-bar-inner">
-            <div class="config-fields">
-              <div class="field config-field-full">
-                <label>Watch Folder</label>
-                <div class="input-with-btn">
-                  <input type="text" id="xray-folder" placeholder="Select folder to watch..." readonly>
-                  <button class="btn-browse" id="btn-select-folder">Browse</button>
-                </div>
-              </div>
-              <div class="field">
-                <label>API Base URL</label>
-                <input type="text" id="xray-api" placeholder="https://api.example.com">
-              </div>
-            </div>
-            <div class="config-save-row">
-              <button class="btn-save-inline" id="btn-save-xray">Save Settings</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Login -->
-      <div id="xray-login" class="xray-auth-card">
-        <h3>Sign in to DentCloud</h3>
-        <p class="auth-hint">Required to upload x-ray images</p>
-        <div class="form-group">
-          <label>Email</label>
-          <input type="email" id="xray-email" placeholder="you@clinic.com">
-        </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" id="xray-password" placeholder="Enter password">
-        </div>
-        <button id="btn-xray-login" class="btn-primary">Sign In</button>
-        <div id="xray-login-error" class="login-error"></div>
-      </div>
-
-      <!-- Branch Select -->
-      <div id="xray-branch-select" style="display:none">
-        <div class="auth-bar">
-          <span>Signed in as <strong id="xray-branch-user-email"></strong></span>
-          <button id="btn-branch-logout" class="btn-ghost">Sign Out</button>
-        </div>
-        <h3 class="section-title">Select Your Branch</h3>
-        <div id="clinic-list"></div>
-      </div>
-
-      <!-- Authenticated -->
-      <div id="xray-authenticated" style="display:none">
-        <div class="auth-bar">
-          <span>Signed in as <strong id="xray-user-email"></strong></span>
-          <button id="btn-xray-logout" class="btn-ghost">Sign Out</button>
-        </div>
-        <div id="drop-zone" class="drop-zone">
-          <div class="drop-zone-inner">
-            <div class="drop-icon">
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-            </div>
-            <p class="drop-title">Drop x-ray files here</p>
-            <p class="drop-hint">DICOM, JPG, or PNG</p>
-          </div>
-        </div>
-        <div id="queue-stats" class="queue-stats"></div>
-        <div id="file-list" class="file-list"></div>
-        <div id="assign-panel" style="display:none">
-          <h3>Assign Patient</h3>
-          <div id="assign-file-info"></div>
-          <div class="assign-row">
-            <input type="text" id="assign-dn" placeholder="Patient DN">
-            <button id="btn-lookup" class="btn-primary btn-sm">Lookup</button>
-          </div>
-          <div id="assign-result"></div>
-          <div id="assign-actions" style="display:none">
-            <button id="btn-assign-confirm" class="btn-primary btn-sm">Confirm Assignment</button>
-            <button id="btn-assign-cancel" class="btn-ghost">Cancel</button>
-          </div>
-        </div>
-      </div>
     </section>
 
     <!-- Event Log -->
@@ -197,7 +95,6 @@
         <button class="filter-chip active" data-filter="all">All</button>
         <button class="filter-chip" data-filter="cardReader">Card Reader</button>
         <button class="filter-chip" data-filter="edc">EDC</button>
-        <button class="filter-chip" data-filter="xray">X-ray</button>
         <button class="filter-chip" data-filter="ws">Connection</button>
         <button class="filter-chip" data-filter="error">Error</button>
       </div>

@@ -4,7 +4,7 @@ const schema = {
   edc: {
     type: 'object',
     properties: {
-      comPort: { type: 'string', default: '' },
+      comPort: { type: 'string', default: 'COM1' },
       baudRate: { type: 'number', default: 9600 },
       dataBits: { type: 'number', default: 8 },
       stopBits: { type: 'number', default: 1 },
@@ -12,18 +12,6 @@ const schema = {
       retryCount: { type: 'number', default: 3 },
       ackTimeout: { type: 'number', default: 5000 },
       responseTimeout: { type: 'number', default: 60000 }
-    },
-    default: {}
-  },
-  xray: {
-    type: 'object',
-    properties: {
-      watchFolder: { type: 'string', default: '' },
-      apiBaseUrl: { type: 'string', default: 'https://api.dentcloud.app' },
-      clinicBranchURL: { type: 'string', default: '' },
-      email: { type: 'string', default: '' },
-      autoStart: { type: 'boolean', default: true },
-      notifications: { type: 'boolean', default: true }
     },
     default: {}
   },
@@ -66,28 +54,4 @@ function setConfig(section, value) {
   s.set(section, value);
 }
 
-function saveCredential(key, value) {
-  try {
-    const { safeStorage } = require('electron');
-    if (safeStorage.isEncryptionAvailable()) {
-      const encrypted = safeStorage.encryptString(value);
-      getStore().set(`_encrypted.${key}`, encrypted.toString('base64'));
-      return true;
-    }
-  } catch {}
-  getStore().set(`_plain.${key}`, value);
-  return false;
-}
-
-function loadCredential(key) {
-  try {
-    const { safeStorage } = require('electron');
-    const encrypted = getStore().get(`_encrypted.${key}`);
-    if (encrypted && safeStorage.isEncryptionAvailable()) {
-      return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
-    }
-  } catch {}
-  return getStore().get(`_plain.${key}`) || null;
-}
-
-module.exports = { getConfig, setConfig, saveCredential, loadCredential, getStore };
+module.exports = { getConfig, setConfig, getStore };

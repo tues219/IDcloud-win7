@@ -68,7 +68,6 @@ class CardReaderModule extends EventEmitter {
           this.currentCard = null;
           this.lastReadData = null;
           this.isReading = false;
-          this._startInsertionWatcher();
         }
       }
     });

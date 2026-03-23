@@ -18,15 +18,9 @@ class EdcInterface extends EventEmitter {
     this._destroyed = false;
     this.serial = new SerialManager(this.config, this.logger);
 
-    this.serial.on('error', async (err) => {
+    this.serial.on('error', (err) => {
       this.status = 'error';
       this.emit('status', { status: 'error', error: err.message });
-      // Port is likely dead after a write error — destroy and reconnect
-      if (this.serial) {
-        await this.serial.destroy();
-        this.serial = null;
-      }
-      this._startReconnect();
     });
 
     this.serial.on('disconnected', () => {
@@ -142,10 +136,8 @@ class EdcInterface extends EventEmitter {
 
       return parsed;
     } catch (err) {
-      if (this.serial && this.serial.isOpen) {
-        this.status = 'connected';
-        this.emit('status', { status: 'connected' });
-      }
+      this.status = 'connected';
+      this.emit('status', { status: 'connected' });
       this.logger.error('Transaction failed', { txCode, error: err.message });
       throw err;
     }

@@ -1,7 +1,7 @@
 {
   "name": "dentcloud-hardware-bridge",
   "version": "1.0.0",
-  "description": "DentCloud Hardware Bridge - Card Reader, EDC, Xray Uploader",
+  "description": "DentCloud Hardware Bridge - Card Reader, EDC",
   "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
@@ -10,23 +10,20 @@
     "test:watch": "vitest",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
-    "rebuild": "electron-rebuild"
+    "rebuild": "electron-rebuild",
+    "postinstall": "node scripts/fix-smartcard-build.js"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",
-    "chokidar": "^3.6.0",
-    "dicom-parser": "^1.8.21",
     "electron-store": "^8.2.0",
     "electron-updater": "^6.3.9",
     "legacy-encoding": "^3.0.0",
-    "node-fetch": "^2.7.0",
     "serialport": "^12.0.0",
-    "sharp": "^0.33.5",
     "smartcard": "^3.7.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "electron": "^41.0.3",
+    "electron": "22.3.27",
     "electron-builder": "^25.1.8",
     "electron-rebuild": "^3.2.9",
     "electronmon": "^2.0.4",
