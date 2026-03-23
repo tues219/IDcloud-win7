@@ -81,19 +81,6 @@ function updateStatus(module, status, error) {
     // For EDC, preserve port detail when no error
   }
 
-  // Toggle EDC gear visibility: hide when connected, show when disconnected
-  if (module === 'edc') {
-    const gear = document.getElementById('btn-edc-gear');
-    const settings = document.getElementById('edc-settings');
-    if (gear) {
-      gear.style.display = (status === 'connected') ? 'none' : '';
-    }
-    // Collapse settings panel when connected
-    if (settings && status === 'connected') {
-      settings.classList.remove('open');
-      if (gear) gear.classList.remove('open');
-    }
-  }
 }
 
 // Initial status fetch

@@ -12,6 +12,7 @@ const ImageProcessor = require('./modules/xray/image-processor');
 const UploadQueue = require('./modules/xray/upload-queue');
 const AuthManager = require('./modules/xray/auth-manager');
 const WsServer = require('../ws-server');
+const { listSerialPorts } = require('./modules/edc/list-ports');
 
 const logger = createLogger('main');
 
@@ -230,8 +231,7 @@ ipcMain.handle('get-logs', async () => {
   }
 });
 ipcMain.handle('list-serial-ports', async () => {
-  const { SerialPort } = require('serialport');
-  return SerialPort.list();
+  return listSerialPorts();
 });
 
 ipcMain.handle('app-version', () => app.getVersion());
@@ -257,8 +257,7 @@ async function initModules() {
   try {
     let edcConfig = getConfig('edc');
     if (!edcConfig.comPort) {
-      const { SerialPort } = require('serialport');
-      const ports = await SerialPort.list();
+      const ports = await listSerialPorts();
       const quectelPorts = ports.filter(p => p.friendlyName && p.friendlyName.includes('Quectel USB AT Port'));
       const quectel = quectelPorts.length ? quectelPorts[quectelPorts.length - 1] : null;
       if (quectel) {
