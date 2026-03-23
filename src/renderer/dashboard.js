@@ -139,8 +139,9 @@ async function populateComPorts(selectedPort) {
   });
   if (selectedPort) {
     select.value = selectedPort;
-  } else {
-    // Auto-select Quectel USB AT Port
+  }
+  // Fallback: if no port selected (none saved, or saved port not in list), auto-select Quectel
+  if (!select.value) {
     const quectelPorts = ports.filter(p => p.friendlyName && p.friendlyName.includes('Quectel USB AT Port'));
     const quectel = quectelPorts.length ? quectelPorts[quectelPorts.length - 1] : null;
     if (quectel) select.value = quectel.path;
@@ -176,6 +177,11 @@ document.getElementById('btn-save-edc').addEventListener('click', async () => {
     baudRate: parseInt(document.getElementById('edc-baud').value),
   });
   addLog('info', 'settings', 'EDC settings saved');
+
+  const restart = confirm('EDC settings saved. The application needs to restart to apply changes.\n\nRestart now?');
+  if (restart) {
+    await bridge.restartApp();
+  }
 });
 
 // ── X-ray Save (inline in X-ray tab) ──

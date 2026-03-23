@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('bridge', {
   getVersion: () => ipcRenderer.invoke('app-version'),
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
   setAutoStart: (enabled) => ipcRenderer.invoke('set-auto-start', enabled),
+  restartApp: () => ipcRenderer.invoke('restart-app'),
 
   // Events
   onStatusUpdate: (cb) => ipcRenderer.on('status-update', (_, data) => cb(data)),

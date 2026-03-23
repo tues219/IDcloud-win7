@@ -246,6 +246,13 @@ ipcMain.handle('set-auto-start', (_, enabled) => {
   return { success: true };
 });
 
+ipcMain.handle('restart-app', () => {
+  logger.info('App restart requested by user');
+  app.isQuitting = true;
+  app.relaunch();
+  app.quit();
+});
+
 // App lifecycle
 async function initModules() {
   try {
@@ -256,8 +263,17 @@ async function initModules() {
 
   try {
     let edcConfig = getConfig('edc');
+    const ports = await listSerialPorts();
+
+    if (edcConfig.comPort) {
+      const portExists = ports.some(p => p.path === edcConfig.comPort);
+      if (!portExists) {
+        logger.warn('Saved COM port not found, re-detecting', { savedPort: edcConfig.comPort });
+        edcConfig = { ...edcConfig, comPort: '' };
+      }
+    }
+
     if (!edcConfig.comPort) {
-      const ports = await listSerialPorts();
       const quectelPorts = ports.filter(p => p.friendlyName && p.friendlyName.includes('Quectel USB AT Port'));
       const quectel = quectelPorts.length ? quectelPorts[quectelPorts.length - 1] : null;
       if (quectel) {
