@@ -10,6 +10,7 @@
     "test:watch": "vitest",
     "build:win": "electron-builder --win",
     "rebuild": "electron-rebuild",
+    "publish:win": "electron-builder --win --publish always",
     "postinstall": "node scripts/fix-smartcard-build.js"
   },
   "dependencies": {
