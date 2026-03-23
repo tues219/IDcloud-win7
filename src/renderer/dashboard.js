@@ -75,10 +75,14 @@ function updateStatus(module, status, error) {
   if (detail) {
     if (error) {
       detail.textContent = error;
+    } else if (module === 'edc' && status === 'connected') {
+      // Restore port name when EDC reconnects
+      bridge.getConfig().then(cfg => {
+        if (cfg.edc && cfg.edc.comPort) detail.textContent = cfg.edc.comPort;
+      });
     } else if (module !== 'edc') {
       detail.textContent = '';
     }
-    // For EDC, preserve port detail when no error
   }
 
 }
