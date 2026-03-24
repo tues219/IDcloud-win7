@@ -65,9 +65,12 @@ class CardReaderModule extends EventEmitter {
           this.logger.error('Card read failed', { error: err.message });
           this.status = 'error';
           this.emit('status', { status: 'error', error: err.message });
-          this.currentCard = null;
           this.lastReadData = null;
           this.isReading = false;
+          // Kill native monitor (unreliable after error), use low-level
+          // polling to detect removal, then watch for reinsertion
+          this._stopMonitor();
+          this._startRemovalWatcher();
         }
       }
     });
@@ -268,6 +271,52 @@ class CardReaderModule extends EventEmitter {
       clearInterval(this._insertWatchTimer);
       this._insertWatchTimer = null;
     }
+  }
+
+  _startRemovalWatcher() {
+    this._stopInsertionWatcher(); // reuse same timer slot
+
+    this._insertWatchTimer = setInterval(async () => {
+      if (this._destroyed) {
+        this._stopInsertionWatcher();
+        return;
+      }
+
+      let cardPresent = false;
+      let ctx;
+      try {
+        ctx = new smartcard.Context();
+        const readers = ctx.listReaders();
+        for (const reader of readers) {
+          try {
+            const card = await reader.connect(
+              smartcard.SCARD_SHARE_SHARED,
+              smartcard.SCARD_PROTOCOL_T0 | smartcard.SCARD_PROTOCOL_T1
+            );
+            try { card.disconnect(); } catch (_) {}
+            cardPresent = true;
+            break;
+          } catch (_) {
+            // No card in this reader
+          }
+        }
+      } catch (_) {
+        // Context failed — treat as no card
+      } finally {
+        if (ctx) {
+          try { ctx.close(); } catch (_) {}
+        }
+      }
+
+      if (!cardPresent) {
+        this.logger.info('Card removal detected by removal watcher');
+        this._stopInsertionWatcher();
+        this.currentCard = null;
+        this.status = 'connected';
+        this.emit('status', { status: 'connected' });
+        this._startInsertionWatcher();
+      }
+    }, 1000);
   }
 
   // Called by WS handler when frontend requests a read
