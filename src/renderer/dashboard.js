@@ -147,7 +147,8 @@ async function refreshStatus() {
     updateStatus('cardReader', status.cardReader.status);
     updateStatus('edc', status.edc.status);
     // ws status — always running if we got here
-    updateStatus('ws', 'connected');
+    updateStatus('ws', 'ready');
+    if (status.xray.queue) renderQueue(status.xray.queue);
   } catch (err) {
     addLog('error', 'dashboard', err.message);
   }
