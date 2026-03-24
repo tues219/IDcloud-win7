@@ -17,6 +17,9 @@ concurrency:
   group: build-windows
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
