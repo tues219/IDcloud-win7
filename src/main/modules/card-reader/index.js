@@ -1,6 +1,8 @@
 const EventEmitter = require('events');
 const smartcard = require('smartcard');
 const { getReaderConfig } = require('./atr-config');
+
+const SCARD_STATE_PRESENT = 0x0020; // from WinSCard.h / pcsclite.h
 const PersonalApplet = require('./personal-applet');
 const NhsoApplet = require('./nhso-applet');
 const { delay } = require('./reader');
@@ -21,6 +23,7 @@ class CardReaderModule extends EventEmitter {
     this._readGeneration = 0; // incremented on card removal to cancel stale reads
     this._cardWatchTimer = null;
     this._insertWatchTimer = null;
+    this._pollCtx = null;
   }
 
   async init() {
@@ -226,42 +229,27 @@ class CardReaderModule extends EventEmitter {
         return;
       }
 
-      // Lightweight check: create temp PCSC context, try to connect to reader
-      let ctx;
+      // Lightweight check: reuse persistent context, check reader state flags
       try {
-        ctx = new smartcard.Context();
+        const ctx = this._getPollContext();
         const readers = ctx.listReaders();
-        for (const reader of readers) {
-          try {
-            const card = await reader.connect(
-              smartcard.SCARD_SHARE_SHARED,
-              smartcard.SCARD_PROTOCOL_T0 | smartcard.SCARD_PROTOCOL_T1
-            );
-            // Card found — disconnect test connection and do full reinit
-            try { card.disconnect(); } catch (_) {}
-            try { ctx.close(); } catch (_) {}
-            ctx = null;
+        const cardPresent = readers.some(r => (r.state & SCARD_STATE_PRESENT) !== 0);
 
-            this.logger.info('Card presence detected by insertion watcher');
-            this._stopInsertionWatcher();
-            this._stopMonitor();
-            try {
-              await this.init();
-            } catch (initErr) {
-              this.logger.error('Failed to reinit after card detected', { error: initErr.message });
-              this._startReconnect();
-            }
-            return;
-          } catch (_) {
-            // No card in this reader
+        if (cardPresent) {
+          this.logger.info('Card presence detected by insertion watcher');
+          this._stopInsertionWatcher();
+          this._closePollContext();
+          this._stopMonitor();
+          try {
+            await this.init();
+          } catch (initErr) {
+            this.logger.error('Failed to reinit after card detected', { error: initErr.message });
+            this._startReconnect();
           }
         }
       } catch (_) {
-        // Context creation or listReaders failed
-      } finally {
-        if (ctx) {
-          try { ctx.close(); } catch (_) {}
-        }
+        // Context went stale — close so next tick creates a fresh one
+        this._closePollContext();
       }
     }, 1000);
   }
@@ -270,6 +258,20 @@ class CardReaderModule extends EventEmitter {
     if (this._insertWatchTimer) {
       clearInterval(this._insertWatchTimer);
       this._insertWatchTimer = null;
+    }
+  }
+
+  _getPollContext() {
+    if (!this._pollCtx) {
+      this._pollCtx = new smartcard.Context();
+    }
+    return this._pollCtx;
+  }
+
+  _closePollContext() {
+    if (this._pollCtx) {
+      try { this._pollCtx.close(); } catch (_) {}
+      this._pollCtx = null;
     }
   }
 
@@ -282,39 +284,23 @@ class CardReaderModule extends EventEmitter {
         return;
       }
 
-      let cardPresent = false;
-      let ctx;
       try {
-        ctx = new smartcard.Context();
+        const ctx = this._getPollContext();
         const readers = ctx.listReaders();
-        for (const reader of readers) {
-          try {
-            const card = await reader.connect(
-              smartcard.SCARD_SHARE_SHARED,
-              smartcard.SCARD_PROTOCOL_T0 | smartcard.SCARD_PROTOCOL_T1
-            );
-            try { card.disconnect(); } catch (_) {}
-            cardPresent = true;
-            break;
-          } catch (_) {
-            // No card in this reader
-          }
+        const cardPresent = readers.some(r => (r.state & SCARD_STATE_PRESENT) !== 0);
+
+        if (!cardPresent) {
+          this.logger.info('Card removal detected by removal watcher');
+          this._stopInsertionWatcher();
+          this._closePollContext();
+          this.currentCard = null;
+          this.status = 'connected';
+          this.emit('status', { status: 'connected' });
+          this._startInsertionWatcher();
         }
       } catch (_) {
-        // Context failed — treat as no card
-      } finally {
-        if (ctx) {
-          try { ctx.close(); } catch (_) {}
-        }
-      }
-
-      if (!cardPresent) {
-        this.logger.info('Card removal detected by removal watcher');
-        this._stopInsertionWatcher();
-        this.currentCard = null;
-        this.status = 'connected';
-        this.emit('status', { status: 'connected' });
-        this._startInsertionWatcher();
+        // Context went stale — close so next tick creates a fresh one
+        this._closePollContext();
       }
     }, 1000);
   }
@@ -357,6 +343,7 @@ class CardReaderModule extends EventEmitter {
 
   _stopMonitor() {
     this._stopCardWatcher();
+    this._closePollContext();
     if (this.devices) {
       try { this.devices.stop(); } catch (_) {}
       this.devices.removeAllListeners();
@@ -400,6 +387,7 @@ class CardReaderModule extends EventEmitter {
     this._readGeneration++;
     this._stopCardWatcher();
     this._stopInsertionWatcher();
+    this._closePollContext();
     if (this._reconnectTimer) {
       clearInterval(this._reconnectTimer);
       this._reconnectTimer = null;
