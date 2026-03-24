@@ -7,6 +7,7 @@ const { createTray, showNotification, destroyTray } = require('./tray');
 const CardReaderModule = require('./modules/card-reader');
 const EdcInterface = require('./modules/edc');
 const WsServer = require('../ws-server');
+const { initAutoUpdater } = require('./updater');
 
 const logger = createLogger('main');
 
@@ -189,6 +190,8 @@ app.whenReady().then(async () => {
 
   const appConfig = getConfig('app');
   app.setLoginItemSettings({ openAtLogin: !!appConfig.autoStart });
+
+  initAutoUpdater(mainWindow, logger, showNotification);
 
   await initModules();
 

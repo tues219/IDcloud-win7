@@ -21,6 +21,21 @@
       <div id="version" class="version-badge"></div>
     </header>
 
+    <div id="update-banner" class="update-banner" style="display:none">
+      <div class="update-banner-content">
+        <i class="fa-solid fa-arrow-up-from-bracket"></i>
+        <span id="update-message"></span>
+        <div id="update-progress" class="update-progress" style="display:none">
+          <div class="update-progress-bar" id="update-progress-bar"></div>
+        </div>
+      </div>
+      <div class="update-actions">
+        <button id="btn-update-download" class="btn-update" style="display:none">Download</button>
+        <button id="btn-update-install" class="btn-update" style="display:none">Install &amp; Restart</button>
+        <button id="btn-update-dismiss" class="btn-dismiss">&times;</button>
+      </div>
+    </div>
+
     <nav>
       <button class="tab active" data-tab="status">Dashboard</button>
       <button class="tab" data-tab="log">Event Log</button>

@@ -31,6 +31,48 @@ bridge.getVersion().then(v => {
   document.getElementById('version').textContent = `v${v}`;
 });
 
+// Auto-Update
+bridge.onUpdateStatus((data) => {
+  const banner = document.getElementById('update-banner');
+  const msg = document.getElementById('update-message');
+  const dlBtn = document.getElementById('btn-update-download');
+  const installBtn = document.getElementById('btn-update-install');
+  const progress = document.getElementById('update-progress');
+  const progressBar = document.getElementById('update-progress-bar');
+
+  switch (data.status) {
+    case 'available':
+      banner.style.display = '';
+      msg.textContent = `Version ${data.version} is available`;
+      dlBtn.style.display = '';
+      installBtn.style.display = 'none';
+      progress.style.display = 'none';
+      break;
+    case 'downloading':
+      dlBtn.style.display = 'none';
+      progress.style.display = '';
+      progressBar.style.width = `${data.percent}%`;
+      msg.textContent = `Downloading update... ${Math.round(data.percent)}%`;
+      break;
+    case 'downloaded':
+      progress.style.display = 'none';
+      installBtn.style.display = '';
+      msg.textContent = `Version ${data.version} ready to install`;
+      break;
+    case 'error':
+      banner.style.display = '';
+      msg.textContent = 'Update check failed';
+      setTimeout(() => banner.style.display = 'none', 5000);
+      break;
+  }
+});
+
+document.getElementById('btn-update-download').addEventListener('click', () => bridge.downloadUpdate());
+document.getElementById('btn-update-install').addEventListener('click', () => bridge.installUpdate());
+document.getElementById('btn-update-dismiss').addEventListener('click', () => {
+  document.getElementById('update-banner').style.display = 'none';
+});
+
 // Status updates
 bridge.onStatusUpdate((data) => {
   addLog('info', data.module, `Status: ${data.status}`);
