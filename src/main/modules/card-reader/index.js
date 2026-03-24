@@ -24,6 +24,16 @@ class CardReaderModule extends EventEmitter {
     this._cardWatchTimer = null;
     this._insertWatchTimer = null;
     this._pollCtx = null;
+    this._pollCtxAge = 0; // track how long the poll context has been alive
+  }
+
+  // Safely disconnect a card handle so the native SCARDHANDLE is released
+  // immediately instead of waiting for GC (which may never run on Win7).
+  _disconnectCard() {
+    if (this.currentCard) {
+      try { this.currentCard.disconnect(); } catch (_) {}
+      this.currentCard = null;
+    }
   }
 
   async init() {
@@ -82,7 +92,7 @@ class CardReaderModule extends EventEmitter {
       this._stopCardWatcher();
       this.logger.info('Card removed');
       this._readGeneration++; // cancel any in-progress read
-      this.currentCard = null;
+      this._disconnectCard();
       this.lastReadData = null;
       this.isReading = false;
       this.status = 'connected';
@@ -96,7 +106,7 @@ class CardReaderModule extends EventEmitter {
       this.logger.warn('Card reader disconnected');
       this._readGeneration++;
       this.currentDevice = null;
-      this.currentCard = null;
+      this._disconnectCard();
       this.lastReadData = null;
       this.isReading = false;
       this.status = 'disconnected';
@@ -114,7 +124,7 @@ class CardReaderModule extends EventEmitter {
         this.status = 'error';
         this._readGeneration++;
         this.currentDevice = null;
-        this.currentCard = null;
+        this._disconnectCard();
         this.lastReadData = null;
         this.isReading = false;
         this.emit('status', { status: 'disconnected' });
@@ -184,6 +194,9 @@ class CardReaderModule extends EventEmitter {
 
   _startCardWatcher() {
     this._stopCardWatcher();
+    // Release poll context — card watcher only uses card.getStatus(),
+    // so we don't need the extra SCardContext open.
+    this._closePollContext();
 
     const card = this.currentCard;
     if (!card) return;
@@ -201,7 +214,7 @@ class CardReaderModule extends EventEmitter {
         this._stopCardWatcher();
 
         this._readGeneration++;
-        this.currentCard = null;
+        this._disconnectCard();
         this.lastReadData = null;
         this.isReading = false;
         this.status = 'connected';
@@ -262,8 +275,15 @@ class CardReaderModule extends EventEmitter {
   }
 
   _getPollContext() {
+    // Refresh context every ~300 polls (5 min at 1s interval) to prevent
+    // Windows 7 Smart Card Resource Manager state drift over long sessions.
+    this._pollCtxAge++;
+    if (this._pollCtx && this._pollCtxAge >= 300) {
+      this._closePollContext();
+    }
     if (!this._pollCtx) {
       this._pollCtx = new smartcard.Context();
+      this._pollCtxAge = 0;
     }
     return this._pollCtx;
   }
@@ -293,7 +313,7 @@ class CardReaderModule extends EventEmitter {
           this.logger.info('Card removal detected by removal watcher');
           this._stopInsertionWatcher();
           this._closePollContext();
-          this.currentCard = null;
+          this._disconnectCard();
           this.status = 'connected';
           this.emit('status', { status: 'connected' });
           this._startInsertionWatcher();
@@ -393,7 +413,7 @@ class CardReaderModule extends EventEmitter {
       this._reconnectTimer = null;
     }
     this._stopMonitor();
-    this.currentCard = null;
+    this._disconnectCard();
     this.currentDevice = null;
     this.lastReadData = null;
     this.isReading = false;
