@@ -128,7 +128,12 @@ class SerialManager extends EventEmitter {
       this.port.removeAllListeners('close');
       if (this.isOpen) {
         await new Promise((resolve) => {
+          const closeTimeout = setTimeout(() => {
+            this.isOpen = false;
+            resolve();
+          }, 3000);
           this.port.close(() => {
+            clearTimeout(closeTimeout);
             this.isOpen = false;
             resolve();
           });

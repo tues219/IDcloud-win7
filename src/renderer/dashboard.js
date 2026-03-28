@@ -219,6 +219,7 @@ document.getElementById('btn-save-edc').addEventListener('click', async () => {
     baudRate: parseInt(document.getElementById('edc-baud').value),
   });
   addLog('info', 'settings', 'EDC settings saved');
+
 });
 
 // ── Event Log ──
