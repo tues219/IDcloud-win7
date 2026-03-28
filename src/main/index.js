@@ -7,6 +7,7 @@ const { createTray, showNotification, destroyTray } = require('./tray');
 const CardReaderModule = require('./modules/card-reader');
 const EdcInterface = require('./modules/edc');
 const WsServer = require('../ws-server');
+const { listSerialPorts } = require('./modules/edc/list-ports');
 const { initAutoUpdater } = require('./updater');
 
 const logger = createLogger('main');
