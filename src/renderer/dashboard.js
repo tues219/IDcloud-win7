@@ -148,7 +148,7 @@ async function refreshStatus() {
     updateStatus('edc', status.edc.status);
     // ws status — always running if we got here
     updateStatus('ws', 'ready');
-    if (status.xray.queue) renderQueue(status.xray.queue);
+    if (status.xray && status.xray.queue) renderQueue(status.xray.queue);
   } catch (err) {
     addLog('error', 'dashboard', err.message);
   }
