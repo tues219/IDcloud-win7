@@ -38,7 +38,8 @@
 
     <nav>
       <button class="tab active" data-tab="status">Dashboard</button>
-      <button class="tab" data-tab="xray">X-ray</button>
+      <!-- X-ray tab disabled for production; re-enable when ready -->
+      <button class="tab" data-tab="xray" style="display:none">X-ray</button>
       <button class="tab" data-tab="log">Event Log</button>
     </nav>
 
@@ -93,7 +94,8 @@
           </div>
         </div>
 
-        <div class="status-row" data-service="xray">
+        <!-- X-ray status hidden for production; re-enable when ready -->
+        <div class="status-row" data-service="xray" style="display:none">
           <span class="svc-dot disconnected" id="xray-dot"></span>
           <span class="svc-name">X-ray Watcher</span>
           <span class="svc-state" id="xray-status">Stopped</span>
@@ -212,7 +214,7 @@
         <button class="filter-chip active" data-filter="all">All</button>
         <button class="filter-chip" data-filter="cardReader">Card Reader</button>
         <button class="filter-chip" data-filter="edc">EDC</button>
-        <button class="filter-chip" data-filter="xray">X-ray</button>
+        <button class="filter-chip" data-filter="xray" style="display:none">X-ray</button>
         <button class="filter-chip" data-filter="ws">Connection</button>
         <button class="filter-chip" data-filter="error">Error</button>
       </div>
