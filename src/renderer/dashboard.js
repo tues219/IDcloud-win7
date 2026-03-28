@@ -86,7 +86,7 @@ bridge.onEvent((data) => {
 });
 
 bridge.onQueueUpdate((status) => {
-  renderQueue(status);
+  if (status) renderQueue(status);
 });
 
 const STATUS_LABELS = {
@@ -440,12 +440,13 @@ dropZone.addEventListener('drop', async (e) => {
 let currentQueueItems = [];
 
 function renderQueue(status) {
+  if (!status) return;
   const statsEl = document.getElementById('queue-stats');
   const chips = [
-    { label: 'Pending', value: status.pending },
-    { label: 'Processing', value: status.processing },
-    { label: 'Completed', value: status.completed },
-    { label: 'Failed', value: status.failed },
+    { label: 'Pending', value: status.pending || 0 },
+    { label: 'Processing', value: status.processing || 0 },
+    { label: 'Completed', value: status.completed || 0 },
+    { label: 'Failed', value: status.failed || 0 },
     { label: 'Awaiting', value: status.awaitingAssignment || 0 },
   ];
   statsEl.innerHTML = chips.map(c =>
