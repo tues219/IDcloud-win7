@@ -2,12 +2,17 @@ const { autoUpdater } = require('electron-updater');
 const { ipcMain } = require('electron');
 
 function initAutoUpdater(mainWindow, logger, showNotification) {
+  autoUpdater.forceDevUpdateConfig = true;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
   function sendStatus(payload) {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-status', payload);
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const wc = mainWindow.webContents;
+    if (wc.isLoading()) {
+      wc.once('did-finish-load', () => wc.send('update-status', payload));
+    } else {
+      wc.send('update-status', payload);
     }
   }
 
@@ -41,13 +46,20 @@ function initAutoUpdater(mainWindow, logger, showNotification) {
   });
 
   // IPC handlers
-  ipcMain.handle('update-check', () => autoUpdater.checkForUpdates());
+  ipcMain.handle('update-check', () => autoUpdater.checkForUpdates().catch(() => {
+    // error event handler already sends status to renderer
+  }));
   ipcMain.handle('update-download', () => autoUpdater.downloadUpdate());
   ipcMain.handle('update-install', () => autoUpdater.quitAndInstall());
 
   // Check 10s after launch, then every 4 hours
-  setTimeout(() => autoUpdater.checkForUpdates(), 10_000);
-  setInterval(() => autoUpdater.checkForUpdates(), 4 * 60 * 60 * 1000);
+  function safeCheckForUpdates() {
+    autoUpdater.checkForUpdates().catch(() => {
+      // error event handler already sends status to renderer
+    });
+  }
+  setTimeout(safeCheckForUpdates, 10_000);
+  setInterval(safeCheckForUpdates, 4 * 60 * 60 * 1000);
 }
 
 module.exports = { initAutoUpdater };
