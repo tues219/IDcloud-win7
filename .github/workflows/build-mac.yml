@@ -59,6 +59,5 @@ jobs:
         with:
           name: DentCloud-Hardware-Bridge-mac
           path: |
-            dist/*.dmg
             dist/*.zip
           retention-days: 30
