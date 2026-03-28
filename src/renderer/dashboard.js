@@ -61,7 +61,10 @@ bridge.onUpdateStatus((data) => {
       break;
     case 'error':
       banner.style.display = '';
-      msg.textContent = 'Update check failed';
+      msg.textContent = data.message ? `Update check failed: ${data.message}` : 'Update check failed';
+      dlBtn.style.display = 'none';
+      installBtn.style.display = 'none';
+      progress.style.display = 'none';
       setTimeout(() => banner.style.display = 'none', 5000);
       break;
   }
