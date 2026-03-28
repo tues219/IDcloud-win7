@@ -1,6 +1,6 @@
 {
   "name": "dentcloud-hardware-bridge",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "DentCloud Hardware Bridge - Card Reader, EDC",
   "main": "src/main/index.js",
   "scripts": {
