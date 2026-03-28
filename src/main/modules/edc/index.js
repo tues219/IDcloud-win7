@@ -86,18 +86,12 @@ class EdcInterface extends EventEmitter {
       await this.serial.send(msg);
       this.logger.info('Message sent, waiting for ACK');
 
-      await Promise.race([
-        this._waitForAck(),
-        this._timeout(ackTimeout, 'EDC_NO_ACK')
-      ]);
+      await this._raceWithTimeout('ack', ackTimeout, 'EDC_NO_ACK');
       this.logger.info('ACK received');
 
       // 3. Wait response (with timeout)
       const responseTimeout = this.config.responseTimeout || 60000;
-      const rawResponse = await Promise.race([
-        this._waitForResponse(),
-        this._timeout(responseTimeout, 'EDC_RESPONSE_TIMEOUT')
-      ]);
+      const rawResponse = await this._raceWithTimeout('response', responseTimeout, 'EDC_RESPONSE_TIMEOUT');
       this.logger.info('Response received');
 
       // 4. Validate LRC checksum
@@ -124,27 +118,55 @@ class EdcInterface extends EventEmitter {
       this.logger.error('Transaction failed', { txCode, error: err.message });
       throw err;
     } finally {
-      await this._disconnect();
+      try {
+        await this._disconnect();
+      } catch (disconnectErr) {
+        this.logger.error('Disconnect failed', { error: disconnectErr.message });
+      }
       this.status = 'ready';
       this.emit('status', { status: 'ready' });
     }
   }
 
-  _waitForAck() {
-    return new Promise((resolve) => {
-      this.serial.once('ack', resolve);
-    });
-  }
+  _raceWithTimeout(eventName, ms, errorMsg) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
 
-  _waitForResponse() {
-    return new Promise((resolve) => {
-      this.serial.once('response', resolve);
-    });
-  }
+      const cleanup = () => {
+        this.serial.removeListener(eventName, onEvent);
+        this.serial.removeListener('error', onError);
+        this.serial.removeListener('disconnected', onDisconnect);
+        clearTimeout(timerId);
+      };
 
-  _timeout(ms, errorMsg) {
-    return new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(errorMsg)), ms);
+      const onEvent = (data) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(data);
+      };
+      const onError = (err) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error(`Serial error: ${err.message}`));
+      };
+      const onDisconnect = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('Serial disconnected'));
+      };
+      const timerId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error(errorMsg));
+      }, ms);
+
+      this.serial.once(eventName, onEvent);
+      this.serial.once('error', onError);
+      this.serial.once('disconnected', onDisconnect);
     });
   }
 
