@@ -30,11 +30,11 @@ class FileWatcher {
     }
 
     this.watchPath = folderPath;
-    const patterns = ALL_EXTENSIONS.map(ext => path.join(folderPath, `**/*${ext}`));
+    const normalizedPath = folderPath.replace(/\\/g, '/');
 
     this.logger.info('Starting file watcher', { path: folderPath });
 
-    this.watcher = chokidar.watch(patterns, {
+    this.watcher = chokidar.watch(normalizedPath, {
       persistent: true,
       ignoreInitial: true,
       depth: 2,
@@ -42,7 +42,12 @@ class FileWatcher {
     });
 
     this.watcher
-      .on('add', (filePath) => this._handleFile(filePath))
+      .on('add', (filePath) => {
+        const ext = path.extname(filePath);
+        if (ALL_EXTENSIONS.includes(ext)) {
+          this._handleFile(filePath);
+        }
+      })
       .on('error', (err) => this.logger.error('Watcher error', { error: err.message }))
       .on('ready', async () => {
         this.isWatching = true;
