@@ -1,12 +1,32 @@
 const EventEmitter = require('events');
 
 class UploadQueue extends EventEmitter {
-  constructor(logger) {
+  constructor(logger, configStore) {
     super();
     this.logger = logger;
-    this.queue = [];
+    this.configStore = configStore;
+    this.queue = this._loadQueue();
     this.processing = false;
     this.authManager = null;
+  }
+
+  _loadQueue() {
+    try {
+      const saved = this.configStore.getStore().get('_xrayQueue', []);
+      // Only restore items that were not completed
+      return saved.filter(i => i.status !== 'completed');
+    } catch {
+      return [];
+    }
+  }
+
+  _saveQueue() {
+    try {
+      const toSave = this.queue.filter(i => i.status !== 'completed');
+      this.configStore.getStore().set('_xrayQueue', toSave);
+    } catch (err) {
+      this.logger.error('Failed to persist queue', { error: err.message });
+    }
   }
 
   setAuthManager(authManager) {
@@ -26,6 +46,7 @@ class UploadQueue extends EventEmitter {
     };
     this.queue.push(item);
     this.logger.info('Added to queue', { id: item.id, file: fileInfo.name, status: item.status });
+    this._saveQueue();
     this.emit('queue-updated', this.getQueueStatus());
     if (!this.processing && item.status === 'pending') this.processQueue();
     return item;
@@ -55,6 +76,7 @@ class UploadQueue extends EventEmitter {
 
       item.status = 'processing';
       item.attempts++;
+      this._saveQueue();
       this.emit('queue-updated', this.getQueueStatus());
 
       if (!this.authManager || !this.authManager.isAuthenticated()) {
@@ -77,27 +99,32 @@ class UploadQueue extends EventEmitter {
           dicomPatientName: item.metadata.patientNameFormatted,
           searchResults: searchResults.patients || [],
         };
+        this._saveQueue();
         this.emit('queue-updated', this.getQueueStatus());
         return;
       }
 
-      // Get presigned URL
+      // Get presigned URL — upload to patient's branch if available
       item.progress = 30;
+      const fs = require('fs').promises;
+      const fileStat = await fs.stat(item.fileInfo.path);
+      const targetBranch = decision.patient?.branchCode || null;
+      const contentType = this._getContentType(item.fileInfo);
       const presigned = await this.authManager.getPresignedUploadURL(
         decision.patientId,
-        { contentType: 'application/dicom', filename: item.fileInfo.name },
-        item.metadata
+        { contentType, filename: item.fileInfo.name, fileSize: fileStat.size },
+        item.metadata,
+        targetBranch
       );
-      if (!presigned.success) throw new Error(`Presigned URL failed: ${presigned.error}`);
+      if (!presigned.success) throw new Error(presigned.error);
 
       // Upload
       item.progress = 50;
-      const fs = require('fs').promises;
       const fetch = require('node-fetch');
       const fileBuffer = await fs.readFile(item.fileInfo.path);
       const response = await fetch(presigned.uploadUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/dicom' },
+        headers: { 'Content-Type': contentType },
         body: fileBuffer,
       });
       if (!response.ok) throw new Error(`S3 upload failed: ${response.status}`);
@@ -105,10 +132,13 @@ class UploadQueue extends EventEmitter {
       item.status = 'completed';
       item.progress = 100;
       this.logger.info('Upload complete', { id: item.id });
+      this._saveQueue();
       this.emit('queue-updated', this.getQueueStatus());
     } catch (err) {
+      this.logger.error('Upload failed', { id: item.id, error: err.message, attempts: item.attempts });
       item.status = 'failed';
       item.error = err.message;
+      this._saveQueue();
       this.emit('queue-updated', this.getQueueStatus());
       if (item.attempts < 3) {
         setTimeout(() => {
@@ -121,6 +151,34 @@ class UploadQueue extends EventEmitter {
     }
   }
 
+  _getContentType(fileInfo) {
+    if (fileInfo.fileType === 'dicom') return 'application/dicom';
+    const ext = (fileInfo.extension || '').toLowerCase();
+    const types = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.bmp': 'image/bmp',
+      '.tif': 'image/tiff',
+      '.tiff': 'image/tiff',
+    };
+    return types[ext] || 'application/octet-stream';
+  }
+
+  retryItem(queueItemId) {
+    const item = this.queue.find(i => i.id === queueItemId);
+    if (!item) return { success: false, error: 'Item not found' };
+    if (item.status !== 'failed') return { success: false, error: 'Item is not failed' };
+
+    item.status = 'pending';
+    item.error = null;
+    item.attempts = 0;
+    this._saveQueue();
+    this.emit('queue-updated', this.getQueueStatus());
+    if (!this.processing) this.processQueue();
+    return { success: true };
+  }
+
   assignPatientDN(queueItemId, patientInfo) {
     const item = this.queue.find(i => i.id === queueItemId);
     if (!item) return { success: false, error: 'Item not found' };
@@ -130,6 +188,7 @@ class UploadQueue extends EventEmitter {
     item.status = 'pending';
     item.error = null;
     item.attempts = 0;
+    this._saveQueue();
     this.emit('queue-updated', this.getQueueStatus());
     if (!this.processing) this.processQueue();
     return { success: true };
@@ -149,6 +208,7 @@ class UploadQueue extends EventEmitter {
 
   clearCompleted() {
     this.queue = this.queue.filter(i => i.status !== 'completed');
+    this._saveQueue();
     this.emit('queue-updated', this.getQueueStatus());
   }
 
@@ -160,6 +220,7 @@ class UploadQueue extends EventEmitter {
         item.attempts = 0;
       }
     });
+    this._saveQueue();
     this.emit('queue-updated', this.getQueueStatus());
     if (!this.processing) this.processQueue();
   }

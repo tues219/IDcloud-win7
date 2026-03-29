@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('bridge', {
   // Status
@@ -21,15 +21,16 @@ contextBridge.exposeInMainWorld('bridge', {
   stopWatching: () => ipcRenderer.invoke('stop-watching'),
   getUploadQueue: () => ipcRenderer.invoke('get-upload-queue'),
   dropFiles: (files) => ipcRenderer.invoke('drop-files', files),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   lookupPatient: (dn) => ipcRenderer.invoke('lookup-patient', dn),
   assignPatient: (queueItemId, patientInfo) => ipcRenderer.invoke('assign-patient', queueItemId, patientInfo),
+  retryUpload: (queueItemId) => ipcRenderer.invoke('retry-upload', queueItemId),
+  getFilePreview: (filePath) => ipcRenderer.invoke('get-file-preview', filePath),
 
-  // Auth
-  login: (credentials) => ipcRenderer.invoke('auth-login', credentials),
-  logout: () => ipcRenderer.invoke('auth-logout'),
+  // Auth (Device API Key)
+  saveApiKey: (params) => ipcRenderer.invoke('save-api-key', params),
+  disconnectDevice: () => ipcRenderer.invoke('disconnect-device'),
   getAuthStatus: () => ipcRenderer.invoke('auth-status'),
-  getClinicList: () => ipcRenderer.invoke('get-clinic-list'),
-  selectBranch: (clinicBranchURL) => ipcRenderer.invoke('select-branch', clinicBranchURL),
 
   // Logs
   getLogs: () => ipcRenderer.invoke('get-logs'),

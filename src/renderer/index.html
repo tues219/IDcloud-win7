@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self'; font-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; font-src 'self'">
   <title>DentCloud Hardware Bridge</title>
   <link rel="stylesheet" href="../../node_modules/@fortawesome/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="styles.css">
@@ -38,8 +38,7 @@
 
     <nav>
       <button class="tab active" data-tab="status">Dashboard</button>
-      <!-- X-ray tab disabled for production; re-enable when ready -->
-      <button class="tab" data-tab="xray" style="display:none">X-ray</button>
+      <button class="tab" data-tab="xray">X-ray</button>
       <button class="tab" data-tab="log">Event Log</button>
     </nav>
 
@@ -94,8 +93,7 @@
           </div>
         </div>
 
-        <!-- X-ray status hidden for production; re-enable when ready -->
-        <div class="status-row" data-service="xray" style="display:none">
+        <div class="status-row" data-service="xray">
           <span class="svc-dot disconnected" id="xray-dot"></span>
           <span class="svc-name">X-ray Watcher</span>
           <span class="svc-state" id="xray-status">Stopped</span>
@@ -143,37 +141,24 @@
         </div>
       </div>
 
-      <!-- Login -->
-      <div id="xray-login" class="xray-auth-card">
-        <h3>Sign in to DentCloud</h3>
-        <p class="auth-hint">Required to upload x-ray images</p>
+      <!-- Connect with API Key -->
+      <div id="xray-connect" class="xray-auth-card">
+        <h3>Connect to DentCloud</h3>
+        <p class="auth-hint">Enter your device API key to start uploading</p>
         <div class="form-group">
-          <label>Email</label>
-          <input type="email" id="xray-email" placeholder="you@clinic.com">
+          <label>API Key</label>
+          <input type="text" id="xray-api-key" placeholder="dck_...">
         </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" id="xray-password" placeholder="Enter password">
-        </div>
-        <button id="btn-xray-login" class="btn-primary">Sign In</button>
-        <div id="xray-login-error" class="login-error"></div>
+        <button id="btn-xray-connect" class="btn-primary">Connect</button>
+        <div id="xray-connect-error" class="login-error"></div>
+        <p class="auth-hint" style="margin-top: 12px; font-size: 11px">รับ API Key ได้จากหน้า DentCloud Admin (ตั้งค่า > อุปกรณ์ที่เชื่อมต่อ)<br>Get your API key from the DentCloud admin dashboard (Settings > Connected Devices)</p>
       </div>
 
-      <!-- Branch Select -->
-      <div id="xray-branch-select" style="display:none">
-        <div class="auth-bar">
-          <span>Signed in as <strong id="xray-branch-user-email"></strong></span>
-          <button id="btn-branch-logout" class="btn-ghost">Sign Out</button>
-        </div>
-        <h3 class="section-title">Select Your Branch</h3>
-        <div id="clinic-list"></div>
-      </div>
-
-      <!-- Authenticated -->
+      <!-- Connected -->
       <div id="xray-authenticated" style="display:none">
         <div class="auth-bar">
-          <span>Signed in as <strong id="xray-user-email"></strong></span>
-          <button id="btn-xray-logout" class="btn-ghost">Sign Out</button>
+          <span>Connected: <strong id="xray-device-name"></strong> | <span id="xray-branch-name"></span></span>
+          <button id="btn-xray-disconnect" class="btn-ghost">Disconnect</button>
         </div>
         <div id="drop-zone" class="drop-zone">
           <div class="drop-zone-inner">
@@ -190,15 +175,30 @@
         <div id="file-list" class="file-list"></div>
         <div id="assign-panel" style="display:none">
           <h3>Assign Patient</h3>
-          <div id="assign-file-info"></div>
-          <div class="assign-row">
-            <input type="text" id="assign-dn" placeholder="Patient DN">
-            <button id="btn-lookup" class="btn-primary btn-sm">Lookup</button>
+          <div class="assign-layout">
+            <div class="assign-preview" id="assign-preview"></div>
+            <div class="assign-controls">
+              <div id="assign-file-info"></div>
+              <div class="assign-row">
+                <input type="text" id="assign-dn" placeholder="Patient DN">
+                <button id="btn-lookup" class="btn-primary btn-sm">Lookup</button>
+              </div>
+              <div id="assign-result"></div>
+              <div id="assign-actions" style="display:none">
+                <button id="btn-assign-confirm" class="btn-primary btn-sm">Confirm Assignment</button>
+                <button id="btn-assign-cancel" class="btn-ghost">Cancel</button>
+              </div>
+            </div>
           </div>
-          <div id="assign-result"></div>
-          <div id="assign-actions" style="display:none">
-            <button id="btn-assign-confirm" class="btn-primary btn-sm">Confirm Assignment</button>
-            <button id="btn-assign-cancel" class="btn-ghost">Cancel</button>
+        </div>
+
+        <!-- Image Preview Modal -->
+        <div id="preview-modal" class="preview-modal" style="display:none">
+          <div class="preview-modal-backdrop"></div>
+          <div class="preview-modal-content">
+            <button class="preview-modal-close">&times;</button>
+            <img id="preview-modal-img" src="" alt="Preview">
+            <div class="preview-modal-info" id="preview-modal-info"></div>
           </div>
         </div>
       </div>
@@ -214,13 +214,14 @@
         <button class="filter-chip active" data-filter="all">All</button>
         <button class="filter-chip" data-filter="cardReader">Card Reader</button>
         <button class="filter-chip" data-filter="edc">EDC</button>
-        <button class="filter-chip" data-filter="xray" style="display:none">X-ray</button>
+        <button class="filter-chip" data-filter="xray">X-ray</button>
         <button class="filter-chip" data-filter="ws">Connection</button>
         <button class="filter-chip" data-filter="error">Error</button>
       </div>
       <div id="event-log" class="log-container"></div>
     </section>
   </div>
+  <div id="toast-container"></div>
   <script src="dashboard.js"></script>
 </body>
 </html>

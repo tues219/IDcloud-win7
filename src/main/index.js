@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, powerMonitor, Menu } = require('ele
 const path = require('path');
 const net = require('net');
 const { createLogger } = require('./logger');
-const { getConfig, setConfig, saveCredential, loadCredential } = require('./config-store');
+const { getConfig, setConfig, saveCredential, loadCredential, getStore } = require('./config-store');
 const { createTray, showNotification, destroyTray } = require('./tray');
 const CardReaderModule = require('./modules/card-reader');
 const EdcInterface = require('./modules/edc');
@@ -36,8 +36,8 @@ const edc = new EdcInterface(getConfig('edc'), edcLogger);
 const fileWatcher = new FileWatcher(xrayLogger);
 const dicomProcessor = new DicomProcessor(xrayLogger);
 const imageProcessor = new ImageProcessor(xrayLogger);
-const uploadQueue = new UploadQueue(xrayLogger);
-const authManager = new AuthManager(xrayLogger, { getConfig, saveCredential, loadCredential });
+const uploadQueue = new UploadQueue(xrayLogger, { getStore });
+const authManager = new AuthManager(xrayLogger, { getConfig, setConfig, saveCredential, loadCredential });
 const wsServer = new WsServer({ cardReader, edc });
 
 uploadQueue.setAuthManager(authManager);
@@ -126,7 +126,7 @@ function createWindow() {
 ipcMain.handle('get-status', () => ({
   cardReader: cardReader.getStatus(),
   edc: edc.getStatus(),
-  xray: { fileWatcher: fileWatcher.getStatus(), queue: uploadQueue.getQueueStatus() },
+  xray: { fileWatcher: fileWatcher.getStatus(), queue: uploadQueue.getQueueStatus(), authenticated: authManager.isAuthenticated() },
   ws: { port: getConfig('ws').port || 9900 },
 }));
 
@@ -179,30 +179,52 @@ ipcMain.handle('drop-files', async (_, filePaths) => {
 
 ipcMain.handle('lookup-patient', (_, dn) => authManager.searchPatientByDN(dn));
 ipcMain.handle('assign-patient', (_, queueItemId, patientInfo) => uploadQueue.assignPatientDN(queueItemId, patientInfo));
+ipcMain.handle('retry-upload', (_, queueItemId) => uploadQueue.retryItem(queueItemId));
 
-ipcMain.handle('auth-login', async (_, creds) => {
-  const result = await authManager.login(creds);
+ipcMain.handle('get-file-preview', async (_, filePath) => {
+  try {
+    const sharp = require('sharp');
+    const fs = require('fs');
+    if (!fs.existsSync(filePath)) return { success: false, error: 'File not found' };
+    const image = sharp(filePath);
+    const metadata = await image.metadata();
+    const buffer = await image
+      .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    return {
+      success: true,
+      dataUrl: `data:image/jpeg;base64,${buffer.toString('base64')}`,
+      width: metadata.width,
+      height: metadata.height,
+      format: metadata.format,
+    };
+  } catch (err) {
+    logger.error('File preview failed', { error: err.message });
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('save-api-key', async (_, { apiKey, apiBaseUrl }) => {
+  if (apiBaseUrl) {
+    const xrayConfig = getConfig('xray');
+    setConfig('xray', { ...xrayConfig, apiBaseUrl });
+  }
+  const result = await authManager.connect(apiKey);
   if (result.success) {
-    const clinics = await authManager.getClinicList();
-    result.clinics = clinics.clinics || [];
+    // Store clinicBranchURL from device validation for patient search
+    const xrayConfig = getConfig('xray');
+    // clinicBranchURL will be set during first patient search if not already set
+    setConfig('xray', { ...xrayConfig });
   }
   return result;
 });
-ipcMain.handle('auth-logout', () => { authManager.logout(); return { success: true }; });
+ipcMain.handle('disconnect-device', () => { authManager.disconnect(); return { success: true }; });
 ipcMain.handle('auth-status', () => ({
   authenticated: authManager.isAuthenticated(),
-  user: authManager.userInfo,
-  hasBranch: !!(authManager.clinicInfo && authManager.branchInfo),
+  device: authManager.deviceInfo,
+  branch: authManager.branchInfo,
 }));
-ipcMain.handle('get-clinic-list', () => authManager.getClinicList());
-ipcMain.handle('select-branch', async (_, clinicBranchURL) => {
-  const result = await authManager.validateConfiguration(clinicBranchURL);
-  if (result.success) {
-    const xrayConfig = getConfig('xray');
-    setConfig('xray', { ...xrayConfig, clinicBranchURL });
-  }
-  return result;
-});
 ipcMain.handle('get-logs', async () => {
   const fs = require('fs');
   const logsDir = path.join(app.getPath('userData'), 'logs');
@@ -297,20 +319,19 @@ async function initModules() {
     logger.error(`Port ${wsPort} is in use`);
   }
 
-  // Auto-login if saved credentials exist
+  // Auto-connect if saved API key exists
   const xrayConfig = getConfig('xray');
-  if (xrayConfig.email) {
+  const savedApiKey = loadCredential('xray-api-key');
+  if (savedApiKey) {
     try {
-      const password = loadCredential('xray-password');
-      if (password) {
-        await authManager.login({ email: xrayConfig.email, password });
-        if (xrayConfig.clinicBranchURL) {
-          await authManager.validateConfiguration(xrayConfig.clinicBranchURL);
-        }
-        logger.info('Auto-login successful', { email: xrayConfig.email });
+      const result = await authManager.connect(savedApiKey);
+      if (result.success) {
+        logger.info('Auto-connect successful', { deviceName: result.device?.name });
+      } else {
+        logger.warn('Auto-connect failed', { error: result.error });
       }
     } catch (err) {
-      logger.error('Auto-login failed (non-fatal)', { error: err.message });
+      logger.error('Auto-connect failed (non-fatal)', { error: err.message });
     }
   }
 

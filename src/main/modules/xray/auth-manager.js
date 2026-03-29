@@ -6,9 +6,8 @@ class AuthManager {
   constructor(logger, configStore) {
     this.logger = logger;
     this.configStore = configStore;
-    this.accessToken = null;
-    this.refreshTokenCookie = null;
-    this.userInfo = null;
+    this.apiKey = null;
+    this.deviceInfo = null;
     this.clinicInfo = null;
     this.branchInfo = null;
   }
@@ -18,106 +17,80 @@ class AuthManager {
     return config.apiBaseUrl || DEFAULT_API_BASE;
   }
 
-  async login(credentials) {
+  _getHeaders() {
+    return {
+      'x-device-api-key': this.apiKey,
+      'Content-Type': 'application/json',
+    };
+  }
+
+  async connect(apiKey) {
     try {
-      const url = `${this._getApiBase()}/api/login`;
+      this.apiKey = apiKey;
+      const url = `${this._getApiBase()}/api/device/validate`;
       const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: credentials.email, password: credentials.password, rememberMe: true }),
+        headers: { 'x-device-api-key': apiKey },
       });
 
       if (!response.ok) {
+        this.apiKey = null;
         const err = await response.json().catch(() => ({}));
-        throw new Error(err.errorMessage?.validationResult?.[0]?.message || err.errorMessage || `Login failed: ${response.status}`);
+        const errMsg = err.errorMessage || err.message;
+        throw new Error(typeof errMsg === 'string' ? errMsg : `Validation failed: ${response.status}`);
       }
 
       const result = await response.json();
-      if (result.status === 'OK' && result.data) {
-        this.accessToken = result.data.accessToken;
-        this.userInfo = result.data.user;
-        const cookie = response.headers.get('set-cookie');
-        if (cookie) this.refreshTokenCookie = cookie;
+      this.deviceInfo = {
+        id: result.deviceId,
+        name: result.deviceName,
+        scopes: result.scopes,
+      };
+      this.clinicInfo = { id: result.clinicId, code: result.clinicCode };
+      this.branchInfo = { id: result.branchId, name: result.branchName, code: result.branchCode };
 
-        // Store credentials securely
-        if (this.configStore.saveCredential) {
-          this.configStore.saveCredential('xray-password', credentials.password);
-        }
-
-        this.logger.info('Login successful', { userId: this.userInfo?.uid });
-        return { success: true, user: this.userInfo };
+      // Store API key and clinicBranchURL securely
+      if (this.configStore.saveCredential) {
+        this.configStore.saveCredential('xray-api-key', apiKey);
       }
-      throw new Error('Authentication failed');
+      // Save clinicBranchURL for patient search and upload API paths
+      const xrayConfig = this.configStore.getConfig('xray');
+      this.configStore.setConfig('xray', {
+        ...xrayConfig,
+        clinicBranchURL: `${result.clinicCode}/${result.branchCode}`,
+      });
+
+      this.logger.info('Device connected', {
+        deviceId: this.deviceInfo.id,
+        deviceName: this.deviceInfo.name,
+        branchName: this.branchInfo.name,
+      });
+
+      return { success: true, device: this.deviceInfo, branch: this.branchInfo };
     } catch (error) {
-      this.logger.error('Login failed', { error: error.message });
+      this.logger.error('Device connection failed', { error: error.message });
+      this.apiKey = null;
       return { success: false, error: error.message };
     }
   }
 
-  async getClinicList(retry = true) {
-    if (!this.accessToken) return { success: false, error: 'Not authenticated' };
-    try {
-      const url = `${this._getApiBase()}/api/user/clinic`;
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${this.accessToken}` },
-      });
-      if (response.status === 401 && retry && this.refreshTokenCookie) {
-        if (await this._refreshToken()) return this.getClinicList(false);
-      }
-      if (!response.ok) throw new Error(`Failed to fetch clinics: ${response.status}`);
-      const result = await response.json();
-      return { success: true, clinics: result.data || result };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
-
-  async validateConfiguration(clinicBranchURL, retry = true) {
-    if (!this.accessToken) throw new Error('Not authenticated');
-    const parts = clinicBranchURL.split('/');
-    if (parts.length !== 2) throw new Error('Invalid format. Expected: clinicName/branchName');
-    const clinicCode = parts[0].trim();
-    const branchCode = parts[1].trim();
-
-    try {
-      const url = `${this._getApiBase()}/api/branch/${clinicCode}/${branchCode}`;
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${this.accessToken}` },
-      });
-      if (response.status === 401 && retry && this.refreshTokenCookie) {
-        if (await this._refreshToken()) return this.validateConfiguration(clinicBranchURL, false);
-      }
-      if (!response.ok) throw new Error(`Branch validation failed: ${response.status}`);
-      const result = await response.json();
-      const branchData = result.data || result;
-
-      this.clinicInfo = { url: clinicCode, name: branchData.clinic?.name || clinicCode };
-      this.branchInfo = { url: branchCode, name: branchData.name || branchCode, id: branchData.id };
-
-      this.logger.info('Branch selected', { clinic: clinicCode, branch: branchCode });
-      return { success: true, clinic: this.clinicInfo, branch: this.branchInfo };
-    } catch (error) {
-      // Fallback: still store the codes so basic functionality works
-      this.clinicInfo = { url: clinicCode };
-      this.branchInfo = { url: branchCode };
-      this.logger.warn('Branch API call failed, using config values', { error: error.message });
-      return { success: true, clinic: this.clinicInfo, branch: this.branchInfo, warning: error.message };
-    }
-  }
-
-  async searchPatientByDN(patientDN, retry = true) {
-    if (!this.accessToken || !this.clinicInfo || !this.branchInfo) {
+  async searchPatientByDN(patientDN, crossBranch = false) {
+    if (!this.apiKey || !this.clinicInfo || !this.branchInfo) {
       return { success: false, error: 'Not configured' };
     }
     try {
-      const url = `${this._getApiBase()}/api/patient/${this.clinicInfo.url}/${this.branchInfo.url}?dn=${encodeURIComponent(patientDN)}`;
+      // Use device's branch for the URL path, but clinicInfo for context
+      const config = this.configStore.getConfig('xray');
+      const clinicBranch = config.clinicBranchURL;
+      if (!clinicBranch) return { success: false, error: 'No clinic/branch configured' };
+
+      const [clinicCode, branchCode] = clinicBranch.split('/');
+      let url = `${this._getApiBase()}/api/patient/${clinicCode}/${branchCode}?dn=${encodeURIComponent(patientDN)}`;
+      if (crossBranch) url += '&crossBranch=true';
+
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${this.accessToken}` },
+        headers: { 'x-device-api-key': this.apiKey },
       });
 
-      if (response.status === 401 && retry && this.refreshTokenCookie) {
-        if (await this._refreshToken()) return this.searchPatientByDN(patientDN, false);
-      }
       if (response.status === 404) return { success: true, patients: [] };
       if (!response.ok) throw new Error(`Search failed: ${response.status}`);
 
@@ -140,15 +113,20 @@ class AuthManager {
     return { upload: false, reason: 'NO_DN_MATCH' };
   }
 
-  async getPresignedUploadURL(patientId, fileMetadata, dicomMetadata, retry = true) {
+  async getPresignedUploadURL(patientId, fileMetadata, dicomMetadata, targetBranch) {
     try {
-      const url = `${this._getApiBase()}/api/mediaFile/getPresigned/${this.clinicInfo.url}/${this.branchInfo.url}`;
+      const config = this.configStore.getConfig('xray');
+      const clinicBranch = config.clinicBranchURL;
+      if (!clinicBranch) throw new Error('No clinic/branch configured');
+
+      const [clinicCode, branchCode] = clinicBranch.split('/');
+      // Upload to patient's branch if specified, otherwise device's branch
+      const uploadBranchCode = targetBranch || branchCode;
+
+      const url = `${this._getApiBase()}/api/mediaFile/getPresigned/${clinicCode}/${uploadBranchCode}`;
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json',
-        },
+        headers: this._getHeaders(),
         body: JSON.stringify({
           category: 'XRay',
           patientId: patientId.toString(),
@@ -156,10 +134,11 @@ class AuthManager {
         }),
       });
 
-      if (response.status === 401 && retry && this.refreshTokenCookie) {
-        if (await this._refreshToken()) return this.getPresignedUploadURL(patientId, fileMetadata, dicomMetadata, false);
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        const detail = errBody.errorMessage || errBody.message || response.status;
+        throw new Error(`Presigned URL failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
       }
-      if (!response.ok) throw new Error(`Presigned URL failed: ${response.status}`);
 
       const result = await response.json();
       let uploadUrl = null;
@@ -172,38 +151,19 @@ class AuthManager {
     }
   }
 
-  async _refreshToken() {
-    try {
-      const response = await fetch(`${this._getApiBase()}/api/token`, {
-        method: 'POST',
-        headers: { 'Cookie': this.refreshTokenCookie, 'Content-Type': 'application/json' },
-      });
-      if (!response.ok) return false;
-      const result = await response.json();
-      if (result.status === 'OK' && result.data) {
-        this.accessToken = result.data.accessToken;
-        const cookie = response.headers.get('set-cookie');
-        if (cookie) this.refreshTokenCookie = cookie;
-        return true;
-      }
-      return false;
-    } catch { return false; }
-  }
-
   getUploadContext() {
     return {
-      clinicURL: this.clinicInfo?.url,
-      branchURL: this.branchInfo?.url,
-      userId: this.userInfo?.uid,
+      deviceId: this.deviceInfo?.id,
+      deviceName: this.deviceInfo?.name,
+      branchName: this.branchInfo?.name,
     };
   }
 
-  isAuthenticated() { return !!this.accessToken; }
+  isAuthenticated() { return !!this.apiKey && !!this.deviceInfo; }
 
-  logout() {
-    this.accessToken = null;
-    this.refreshTokenCookie = null;
-    this.userInfo = null;
+  disconnect() {
+    this.apiKey = null;
+    this.deviceInfo = null;
     this.clinicInfo = null;
     this.branchInfo = null;
   }

@@ -256,6 +256,11 @@ nav {
   background: var(--border);
 }
 
+.svc-dot.need-api-key, .svc-dot.need-watch-folder {
+  background: var(--amber);
+  box-shadow: 0 0 0 3px rgba(154, 103, 0, 0.12);
+}
+
 .svc-dot.error {
   background: var(--red);
   box-shadow: 0 0 0 3px rgba(196, 43, 28, 0.10);
@@ -777,6 +782,22 @@ nav {
 
 .btn-assign:hover { background: var(--brand-deep); }
 
+.btn-retry {
+  background: var(--red);
+  color: white;
+  border: none;
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 6px;
+  transition: background var(--tr);
+}
+.btn-retry:hover { background: var(--red-deep, #c0392b); }
+.btn-retry:disabled { opacity: 0.6; cursor: default; }
+
 /* ── Assign Panel ── */
 #assign-panel {
   background: var(--surface);
@@ -829,6 +850,151 @@ nav {
 .no-results { padding: 10px; text-align: center; color: var(--text-3); font-size: 12px; }
 
 #assign-actions { display: flex; gap: 6px; margin-top: 6px; }
+
+/* ── Assign Panel Side-by-Side Layout ── */
+.assign-layout {
+  display: flex;
+  gap: 16px;
+}
+
+.assign-preview {
+  flex-shrink: 0;
+  width: 160px;
+  text-align: center;
+}
+
+.assign-controls {
+  flex: 1;
+  min-width: 0;
+}
+
+.assign-thumbnail {
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  transition: border-color var(--tr), box-shadow var(--tr);
+}
+
+.assign-thumbnail:hover {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-glow);
+}
+
+.assign-preview-filename {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 6px;
+  word-break: break-all;
+}
+
+.assign-preview-meta {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* ── DICOM Metadata Card ── */
+.assign-metadata-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.metadata-icon {
+  text-align: center;
+  font-size: 24px;
+  margin-bottom: 8px;
+  color: var(--brand);
+}
+
+.metadata-field {
+  margin-bottom: 6px;
+}
+
+.metadata-field:last-child {
+  margin-bottom: 0;
+}
+
+.metadata-label {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  margin-bottom: 1px;
+}
+
+.metadata-value {
+  display: block;
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* ── Preview Modal ── */
+.preview-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.preview-modal-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.preview-modal-close {
+  position: absolute;
+  top: -32px;
+  right: -8px;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+
+.preview-modal-close:hover {
+  opacity: 1;
+}
+
+#preview-modal-img {
+  max-width: 90vw;
+  max-height: 80vh;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.preview-modal-info {
+  margin-top: 10px;
+  padding: 8px 16px;
+  background: rgba(26, 26, 46, 0.85);
+  border-radius: 6px;
+  color: #aaa;
+  font-size: 11px;
+}
 
 /* ── Log Filter Bar ── */
 .log-filter-bar {
@@ -913,3 +1079,39 @@ nav {
 ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 .log-container::-webkit-scrollbar-thumb { background: #1c2a3a; }
 .log-container::-webkit-scrollbar-thumb:hover { background: #2c3a4a; }
+
+/* ── Toast Notifications ── */
+#toast-container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--green);
+  color: var(--text-inv);
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: toast-in 0.3s ease, toast-out 0.3s ease 2.2s forwards;
+  pointer-events: auto;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-8px); }
+}
