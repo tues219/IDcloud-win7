@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, powerMonitor, Menu } = require('ele
 const path = require('path');
 const net = require('net');
 const { createLogger } = require('./logger');
-const { getConfig, setConfig, saveCredential, loadCredential } = require('./config-store');
+const { getConfig, setConfig, saveCredential, loadCredential, getStore } = require('./config-store');
 const { createTray, showNotification, destroyTray } = require('./tray');
 const CardReaderModule = require('./modules/card-reader');
 const EdcInterface = require('./modules/edc');
@@ -36,8 +36,8 @@ const edc = new EdcInterface(getConfig('edc'), edcLogger);
 const fileWatcher = new FileWatcher(xrayLogger);
 const dicomProcessor = new DicomProcessor(xrayLogger);
 const imageProcessor = new ImageProcessor(xrayLogger);
-const uploadQueue = new UploadQueue(xrayLogger);
-const authManager = new AuthManager(xrayLogger, { getConfig, saveCredential, loadCredential });
+const uploadQueue = new UploadQueue(xrayLogger, { getStore });
+const authManager = new AuthManager(xrayLogger, { getConfig, setConfig, saveCredential, loadCredential });
 const wsServer = new WsServer({ cardReader, edc });
 
 uploadQueue.setAuthManager(authManager);
@@ -126,7 +126,7 @@ function createWindow() {
 ipcMain.handle('get-status', () => ({
   cardReader: cardReader.getStatus(),
   edc: edc.getStatus(),
-  xray: { fileWatcher: fileWatcher.getStatus(), queue: uploadQueue.getQueueStatus() },
+  xray: { fileWatcher: fileWatcher.getStatus(), queue: uploadQueue.getQueueStatus(), authenticated: authManager.isAuthenticated() },
   ws: { port: getConfig('ws').port || 9900 },
 }));
 
@@ -179,6 +179,31 @@ ipcMain.handle('drop-files', async (_, filePaths) => {
 
 ipcMain.handle('lookup-patient', (_, dn) => authManager.searchPatientByDN(dn));
 ipcMain.handle('assign-patient', (_, queueItemId, patientInfo) => uploadQueue.assignPatientDN(queueItemId, patientInfo));
+ipcMain.handle('retry-upload', (_, queueItemId) => uploadQueue.retryItem(queueItemId));
+
+ipcMain.handle('get-file-preview', async (_, filePath) => {
+  try {
+    const sharp = require('sharp');
+    const fs = require('fs');
+    if (!fs.existsSync(filePath)) return { success: false, error: 'File not found' };
+    const image = sharp(filePath);
+    const metadata = await image.metadata();
+    const buffer = await image
+      .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    return {
+      success: true,
+      dataUrl: `data:image/jpeg;base64,${buffer.toString('base64')}`,
+      width: metadata.width,
+      height: metadata.height,
+      format: metadata.format,
+    };
+  } catch (err) {
+    logger.error('File preview failed', { error: err.message });
+    return { success: false, error: err.message };
+  }
+});
 
 ipcMain.handle('save-api-key', async (_, { apiKey, apiBaseUrl }) => {
   if (apiBaseUrl) {

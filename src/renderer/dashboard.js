@@ -5,10 +5,29 @@ const eventLog = [];
 let activeFilter = 'all';
 let persistedLogsLoaded = false;
 
+function showToast(message) {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = message;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
 function esc(str) {
   const d = document.createElement('div');
   d.textContent = str;
   return d.innerHTML;
+}
+
+function shortError(msg) {
+  if (!msg) return '';
+  if (msg.includes('Not authenticated')) return 'Not authenticated';
+  if (msg.includes('Patient search failed')) return 'Patient search failed';
+  if (msg.includes('Presigned URL failed')) return 'Upload request failed';
+  if (msg.includes('S3 upload failed')) return 'Upload failed';
+  if (msg.length > 60) return msg.substring(0, 57) + '...';
+  return msg;
 }
 
 // Tab switching
@@ -100,6 +119,8 @@ const STATUS_LABELS = {
   'read-complete': 'Read Complete',
   'processing': 'Processing',
   'error': 'Error',
+  'need-api-key': 'Need API Key',
+  'need-watch-folder': 'Need Watch Folder',
 };
 
 function updateStatus(module, status, error) {
@@ -139,7 +160,16 @@ async function refreshStatus() {
     const status = await bridge.getStatus();
     updateStatus('cardReader', status.cardReader.status);
     updateStatus('edc', status.edc.status);
-    updateStatus('xray', status.xray.fileWatcher.isWatching ? 'connected' : 'disconnected');
+    // Determine xray status based on both watcher and auth
+    if (status.xray.fileWatcher.isWatching && status.xray.authenticated) {
+      updateStatus('xray', 'connected');
+    } else if (status.xray.fileWatcher.isWatching && !status.xray.authenticated) {
+      updateStatus('xray', 'need-api-key');
+    } else if (!status.xray.fileWatcher.isWatching && status.xray.authenticated) {
+      updateStatus('xray', 'need-watch-folder');
+    } else {
+      updateStatus('xray', 'disconnected');
+    }
     // ws status — always running if we got here
     updateStatus('ws', 'ready');
     if (status.xray.queue) renderQueue(status.xray.queue);
@@ -156,7 +186,9 @@ bridge.getAutoStart().then(enabled => {
 });
 document.getElementById('chk-auto-start').addEventListener('change', async (e) => {
   await bridge.setAutoStart(e.target.checked);
-  addLog('info', 'settings', `Start on boot ${e.target.checked ? 'enabled' : 'disabled'}`);
+  const msg = `Start on boot ${e.target.checked ? 'enabled' : 'disabled'}`;
+  addLog('info', 'settings', msg);
+  showToast(msg);
 });
 
 // ── EDC Gear Toggle ──
@@ -227,6 +259,7 @@ document.getElementById('btn-save-edc').addEventListener('click', async () => {
     baudRate: parseInt(document.getElementById('edc-baud').value),
   });
   addLog('info', 'settings', 'EDC settings saved');
+  showToast('EDC settings saved');
 
   const restart = confirm('EDC settings saved. The application needs to restart to apply changes.\n\nRestart now?');
   if (restart) {
@@ -244,6 +277,7 @@ document.getElementById('btn-save-xray').addEventListener('click', async () => {
     apiBaseUrl: document.getElementById('xray-api').value,
   });
   addLog('info', 'settings', 'X-ray settings saved');
+  showToast('X-ray settings saved');
 });
 
 // ── Folder Browse ──
@@ -299,6 +333,7 @@ document.getElementById('btn-xray-connect').addEventListener('click', async () =
     const result = await bridge.saveApiKey({ apiKey });
     if (result.success) {
       addLog('info', 'xray', `Connected as ${result.device?.name || 'device'}`);
+      showToast(`Connected as ${result.device?.name || 'device'}`);
       showConnectedView(result.device, result.branch);
     } else {
       errorEl.textContent = result.error || 'Connection failed';
@@ -316,6 +351,7 @@ document.getElementById('btn-xray-disconnect').addEventListener('click', async (
   showConnectView();
   document.getElementById('xray-api-key').value = '';
   addLog('info', 'xray', 'Disconnected');
+  showToast('Disconnected');
 });
 
 // ── Drop Zone ──
@@ -330,7 +366,7 @@ dropZone.addEventListener('dragleave', () => {
 dropZone.addEventListener('drop', async (e) => {
   e.preventDefault();
   dropZone.classList.remove('dragover');
-  const files = Array.from(e.dataTransfer.files).map(f => f.path);
+  const files = Array.from(e.dataTransfer.files).map(f => bridge.getPathForFile(f)).filter(Boolean);
   if (files.length > 0) {
     await bridge.dropFiles(files);
     addLog('info', 'xray', `Dropped ${files.length} file(s)`);
@@ -366,10 +402,14 @@ function renderQueue(status) {
     const assignBtn = item.status === 'awaiting-assignment'
       ? ` <button class="btn-assign" data-id="${item.id}">Assign</button>`
       : '';
+    const retryBtn = item.status === 'failed'
+      ? ` <button class="btn-retry" data-id="${item.id}">Retry</button>`
+      : '';
+    const errorText = item.error ? ': ' + esc(shortError(item.error)) : '';
     return `
       <div class="file-item">
         <span>${esc(item.fileInfo.name)}${dicomInfo}</span>
-        <span class="file-status ${esc(item.status)}">${esc(item.status)}${item.error ? ': ' + esc(item.error) : ''}${assignBtn}</span>
+        <span class="file-status ${esc(item.status)}">${esc(item.status)}${errorText}${assignBtn}${retryBtn}</span>
       </div>`;
   }).join('');
 
@@ -378,6 +418,14 @@ function renderQueue(status) {
       const itemId = parseFloat(btn.dataset.id);
       const item = currentQueueItems.find(i => i.id === itemId);
       if (item) openAssignPanel(item);
+    });
+  });
+
+  listEl.querySelectorAll('.btn-retry').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Retrying...';
+      await bridge.retryUpload(parseFloat(btn.dataset.id));
     });
   });
 }
@@ -390,22 +438,43 @@ function openAssignPanel(item) {
   currentAssignItem = item;
   selectedPatient = null;
   const panel = document.getElementById('assign-panel');
+  const previewEl = document.getElementById('assign-preview');
   const fileInfo = document.getElementById('assign-file-info');
   const dnInput = document.getElementById('assign-dn');
   const resultEl = document.getElementById('assign-result');
   const actionsEl = document.getElementById('assign-actions');
 
-  let info = `<strong>File:</strong> ${esc(item.fileInfo.name)}`;
-  if (item.metadata && item.metadata.patientNameFormatted) {
-    info += `<br><strong>DICOM Patient:</strong> ${esc(item.metadata.patientNameFormatted)}`;
+  // Render preview (left column)
+  if (item.fileInfo.fileType === 'dicom') {
+    const m = item.metadata || {};
+    previewEl.innerHTML = `
+      <div class="assign-metadata-card">
+        <div class="metadata-icon"><i class="fa-solid fa-tooth"></i></div>
+        <div class="metadata-field"><span class="metadata-label">PATIENT</span><span class="metadata-value">${esc(m.patientNameFormatted || m.patientName || 'Unknown')}</span></div>
+        <div class="metadata-field"><span class="metadata-label">MODALITY</span><span class="metadata-value">${esc(m.modality || 'N/A')}</span></div>
+        <div class="metadata-field"><span class="metadata-label">STUDY DATE</span><span class="metadata-value">${esc(m.studyDateFormatted || m.studyDate || 'N/A')}</span></div>
+        <div class="metadata-field"><span class="metadata-label">DESCRIPTION</span><span class="metadata-value">${esc(m.studyDescription || m.seriesDescription || 'N/A')}</span></div>
+      </div>
+      <div class="assign-preview-filename">${esc(item.fileInfo.name)}</div>
+      <div class="assign-preview-meta">DICOM &bull; ${formatFileSize(item.fileInfo.size)}</div>`;
+  } else {
+    const thumb = (item.metadata && item.metadata.thumbnail) || '';
+    previewEl.innerHTML = `
+      <img class="assign-thumbnail" src="${thumb}" alt="Preview" title="Click to enlarge">
+      <div class="assign-preview-filename">${esc(item.fileInfo.name)}</div>
+      <div class="assign-preview-meta">Photo &bull; ${formatFileSize(item.fileInfo.size)}</div>`;
+    const thumbImg = previewEl.querySelector('.assign-thumbnail');
+    if (thumbImg && thumb) {
+      thumbImg.addEventListener('click', () => openPreviewModal(item));
+    }
   }
-  if (item.metadata && item.metadata.patientId) {
-    info += ` | <strong>DN:</strong> ${esc(item.metadata.patientId)}`;
-  }
+
+  let info = '';
   if (item.matchInfo && item.matchInfo.reason) {
-    info += `<br><strong>Reason:</strong> ${esc(item.matchInfo.reason)}`;
+    info += `<strong>Reason:</strong> ${esc(item.matchInfo.reason)}`;
   }
   fileInfo.innerHTML = info;
+  fileInfo.style.display = info ? '' : 'none';
 
   dnInput.value = (item.matchInfo && item.matchInfo.dicomPatientId) || (item.metadata && item.metadata.patientId) || '';
 
@@ -420,6 +489,52 @@ function openAssignPanel(item) {
   panel.style.display = '';
 }
 
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+// ── Preview Modal ──
+async function openPreviewModal(item) {
+  const modal = document.getElementById('preview-modal');
+  const img = document.getElementById('preview-modal-img');
+  const info = document.getElementById('preview-modal-info');
+
+  img.src = '';
+  info.textContent = 'Loading...';
+  modal.style.display = 'flex';
+
+  try {
+    const result = await bridge.getFilePreview(item.fileInfo.path);
+    if (result.success) {
+      img.src = result.dataUrl;
+      info.innerHTML = `${esc(item.fileInfo.name)} &bull; ${result.width} &times; ${result.height} &bull; ${formatFileSize(item.fileInfo.size)} &bull; ${esc(result.format || '').toUpperCase()}`;
+    } else {
+      info.textContent = 'Failed to load preview';
+    }
+  } catch {
+    info.textContent = 'Failed to load preview';
+  }
+}
+
+function closePreviewModal() {
+  const modal = document.getElementById('preview-modal');
+  modal.style.display = 'none';
+  document.getElementById('preview-modal-img').src = '';
+}
+
+// Register modal close handlers (script runs after DOM is ready)
+const previewModal = document.getElementById('preview-modal');
+if (previewModal) {
+  previewModal.querySelector('.preview-modal-backdrop').addEventListener('click', closePreviewModal);
+  previewModal.querySelector('.preview-modal-close').addEventListener('click', closePreviewModal);
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closePreviewModal();
+});
+
 function closeAssignPanel() {
   document.getElementById('assign-panel').style.display = 'none';
   document.getElementById('assign-result').innerHTML = '';
@@ -432,7 +547,7 @@ function renderPatientResults(patients) {
   if (!patients || patients.length === 0) return '<div class="no-results">No patients found</div>';
   return patients.map(p => `
     <div class="patient-card" data-id="${esc(String(p.id || ''))}" data-dn="${esc(p.dn || '')}">
-      <div class="patient-name">${esc(p.fullName || ((p.firstNameEn || '') + ' ' + (p.lastNameEn || '')).trim() || 'Unknown')}</div>
+      <div class="patient-name">${esc(p.name || p.fullName || ((p.firstNameEn || '') + ' ' + (p.lastNameEn || '')).trim() || 'Unknown')}</div>
       <div class="patient-dn">DN: ${esc(p.dn || 'N/A')}</div>
       <div class="patient-dob">${esc(p.dob || '')}</div>
     </div>

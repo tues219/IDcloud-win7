@@ -35,7 +35,8 @@ class AuthManager {
       if (!response.ok) {
         this.apiKey = null;
         const err = await response.json().catch(() => ({}));
-        throw new Error(err.errorMessage || err.message || `Validation failed: ${response.status}`);
+        const errMsg = err.errorMessage || err.message;
+        throw new Error(typeof errMsg === 'string' ? errMsg : `Validation failed: ${response.status}`);
       }
 
       const result = await response.json();
@@ -133,7 +134,11 @@ class AuthManager {
         }),
       });
 
-      if (!response.ok) throw new Error(`Presigned URL failed: ${response.status}`);
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        const detail = errBody.errorMessage || errBody.message || response.status;
+        throw new Error(`Presigned URL failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+      }
 
       const result = await response.json();
       let uploadUrl = null;

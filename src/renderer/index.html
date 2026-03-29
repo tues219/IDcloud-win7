@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self'; font-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; font-src 'self'">
   <title>DentCloud Hardware Bridge</title>
   <link rel="stylesheet" href="../../node_modules/@fortawesome/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="styles.css">
@@ -175,15 +175,30 @@
         <div id="file-list" class="file-list"></div>
         <div id="assign-panel" style="display:none">
           <h3>Assign Patient</h3>
-          <div id="assign-file-info"></div>
-          <div class="assign-row">
-            <input type="text" id="assign-dn" placeholder="Patient DN">
-            <button id="btn-lookup" class="btn-primary btn-sm">Lookup</button>
+          <div class="assign-layout">
+            <div class="assign-preview" id="assign-preview"></div>
+            <div class="assign-controls">
+              <div id="assign-file-info"></div>
+              <div class="assign-row">
+                <input type="text" id="assign-dn" placeholder="Patient DN">
+                <button id="btn-lookup" class="btn-primary btn-sm">Lookup</button>
+              </div>
+              <div id="assign-result"></div>
+              <div id="assign-actions" style="display:none">
+                <button id="btn-assign-confirm" class="btn-primary btn-sm">Confirm Assignment</button>
+                <button id="btn-assign-cancel" class="btn-ghost">Cancel</button>
+              </div>
+            </div>
           </div>
-          <div id="assign-result"></div>
-          <div id="assign-actions" style="display:none">
-            <button id="btn-assign-confirm" class="btn-primary btn-sm">Confirm Assignment</button>
-            <button id="btn-assign-cancel" class="btn-ghost">Cancel</button>
+        </div>
+
+        <!-- Image Preview Modal -->
+        <div id="preview-modal" class="preview-modal" style="display:none">
+          <div class="preview-modal-backdrop"></div>
+          <div class="preview-modal-content">
+            <button class="preview-modal-close">&times;</button>
+            <img id="preview-modal-img" src="" alt="Preview">
+            <div class="preview-modal-info" id="preview-modal-info"></div>
           </div>
         </div>
       </div>
@@ -206,6 +221,7 @@
       <div id="event-log" class="log-container"></div>
     </section>
   </div>
+  <div id="toast-container"></div>
   <script src="dashboard.js"></script>
 </body>
 </html>
