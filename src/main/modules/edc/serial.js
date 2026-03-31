@@ -19,7 +19,7 @@ class SerialManager extends EventEmitter {
 
   async init() {
     const portConfig = {
-      path: this.config.comPort || 'COM1',
+      path: this.config.comPort,
       baudRate: this.config.baudRate || 9600,
       dataBits: this.config.dataBits || 8,
       stopBits: this.config.stopBits || 1,
