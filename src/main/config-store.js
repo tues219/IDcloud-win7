@@ -4,7 +4,7 @@ const schema = {
   edc: {
     type: 'object',
     properties: {
-      comPort: { type: 'string', default: 'COM1' },
+      comPort: { type: 'string', default: '' },
       baudRate: { type: 'number', default: 9600 },
       dataBits: { type: 'number', default: 8 },
       stopBits: { type: 'number', default: 1 },

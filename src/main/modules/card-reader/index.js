@@ -144,6 +144,8 @@ class CardReaderModule extends EventEmitter {
       return;
     }
     this.isReading = true;
+    this.status = 'reading';
+    this.emit('status', { status: 'reading' });
     const gen = this._readGeneration;
 
     try {
