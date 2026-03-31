@@ -80,6 +80,7 @@ class CardReaderModule extends EventEmitter {
           this.emit('status', { status: 'error', error: err.message });
           this.lastReadData = null;
           this.isReading = false;
+          this._disconnectCard(); // Release handle for other apps
           // Kill native monitor (unreliable after error), use low-level
           // polling to detect removal, then watch for reinsertion
           this._stopMonitor();
@@ -167,8 +168,10 @@ class CardReaderModule extends EventEmitter {
       this.emit('status', { status: 'read-complete' });
       this.logger.info('Card read complete');
 
-      // Windows PCSC native monitor may fail to detect card state changes after read.
-      // Poll card.getStatus() to actively detect removal, then reinitialize monitoring.
+      // Release card handle so other applications can access the reader
+      this._disconnectCard();
+
+      // Poll reader state flags to detect removal (no card handle needed)
       this._startCardWatcher();
     } finally {
       if (gen === this._readGeneration) {
@@ -196,34 +199,35 @@ class CardReaderModule extends EventEmitter {
 
   _startCardWatcher() {
     this._stopCardWatcher();
-    // Release poll context — card watcher only uses card.getStatus(),
-    // so we don't need the extra SCardContext open.
-    this._closePollContext();
-
-    const card = this.currentCard;
-    if (!card) return;
 
     this._cardWatchTimer = setInterval(async () => {
-      if (this._destroyed || !this.currentCard) {
+      if (this._destroyed) {
         this._stopCardWatcher();
         return;
       }
 
       try {
-        card.getStatus();
-      } catch (err) {
-        this.logger.info('Card removal detected by active watcher');
-        this._stopCardWatcher();
+        const ctx = this._getPollContext();
+        const readers = ctx.listReaders();
+        const cardPresent = readers.some(r => (r.state & SCARD_STATE_PRESENT) !== 0);
 
-        this._readGeneration++;
-        this._disconnectCard();
-        this.lastReadData = null;
-        this.isReading = false;
-        this.status = 'connected';
-        this.emit('status', { status: 'connected' });
+        if (!cardPresent) {
+          this.logger.info('Card removal detected by active watcher');
+          this._stopCardWatcher();
+          this._closePollContext();
 
-        // Native PCSC monitor can't detect insertion either — poll via periodic reinit
-        this._startInsertionWatcher();
+          this._readGeneration++;
+          this._disconnectCard();
+          this.lastReadData = null;
+          this.isReading = false;
+          this.status = 'connected';
+          this.emit('status', { status: 'connected' });
+
+          this._startInsertionWatcher();
+        }
+      } catch (_) {
+        // Context went stale — close so next tick creates a fresh one
+        this._closePollContext();
       }
     }, 1000);
   }
